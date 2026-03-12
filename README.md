@@ -133,14 +133,6 @@ npm run test:e2e
 npm run test:load
 ```
 
-## What I learned building this
-
-1. **Decode is the bottleneck, not prefill** — 92% of GPU time is decode. Prefix sharing saves 96% of prefill, but prefill is only 5% of total time at low concurrency.
-2. **Batching is the single biggest lever** — 158x throughput from one change. This is why vLLM exists.
-3. **VRAM is the constraint** — every decision (model placement, KV cache eviction, quantization) comes back to fitting things in GPU memory.
-4. **`tp_plan="auto"` != `device_map="auto"`** — tensor parallelism splits matrix ops across GPUs for parallel speedup. Device map just puts different layers on different GPUs (pipeline parallelism, no speedup).
-5. **The gap between "model runs" and "model serves"** — loading a model is 1% of the work. Scheduling, batching, caching, routing, backpressure, cancellation, timeout, observability is the other 99%.
-
 ## Project structure
 
 ```
@@ -175,6 +167,3 @@ inference-stack/
 - Token-level rate limiting
 - Quantization-aware routing
 
----
-
-Built with Claude Code as a learning exercise. Every line was written by AI, directed by a human who wanted to understand how inference infrastructure works.
