@@ -27,6 +27,7 @@ from pipelines.vision_language import VisionLanguagePipeline
 from pipelines.tts import TTSPipeline
 from pipelines.image_gen import ImageGenPipeline
 from pipelines.video_gen import VideoGenPipeline
+from kv_cache_store import KVCacheStore
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +40,9 @@ logger = logging.getLogger(__name__)
 # When a model_id isn't in this map, falls back to model_type from LoadModelRequest,
 # then defaults to "text_gen".
 MODEL_TYPE_REGISTRY = {
-    "HuggingFaceTB/SmolLM2-135M": "text_gen",
-    "HuggingFaceTB/SmolLM2-360M": "text_gen",
+    "HuggingFaceTB/SmolLM2-135M-Instruct": "text_gen",
+    "HuggingFaceTB/SmolLM2-360M-Instruct": "text_gen",
+    "HuggingFaceTB/SmolLM2-1.7B-Instruct": "text_gen",
     "Qwen/Qwen2.5-VL-3B-Instruct": "vision_language",
     "hexgrad/Kokoro-82M": "tts",
     "stabilityai/sd-turbo": "image_gen",
@@ -72,7 +74,8 @@ class LoadedModelInfo:
 class GpuWorker:
     """Manages a single GPU — loads models, runs inference, reports state."""
 
-    def __init__(self, gpu_id: int = 0, worker_id: str = "worker-0"):
+    def __init__(self, gpu_id: int = 0, worker_id: str = "worker-0",
+                 kv_cache_max_bytes: int = 200 * 1024**3):
         self.gpu_id = gpu_id
         self.worker_id = worker_id
         self.device = f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu"
@@ -81,6 +84,7 @@ class GpuWorker:
         self.active_inferences = 0
         self.loaded_models: Dict[str, LoadedModelInfo] = {}
         self._lock = threading.Lock()
+        self.kv_store = KVCacheStore(max_bytes=kv_cache_max_bytes)
 
         # Resolve physical GPU index for pynvml (not affected by CUDA_VISIBLE_DEVICES)
         self.physical_gpu_id = gpu_id
@@ -217,7 +221,11 @@ class GpuWorker:
             vram_before = torch.cuda.memory_allocated(self.gpu_id) if torch.cuda.is_available() else 0
 
             try:
-                pipeline = pipeline_cls(model_id=model_id, device=self.device, quantization=quantization)
+                # Pass kv_store to text_gen pipelines for disaggregated caching
+                kwargs = dict(model_id=model_id, device=self.device, quantization=quantization)
+                if detected_type == "text_gen":
+                    kwargs["kv_store"] = self.kv_store
+                pipeline = pipeline_cls(**kwargs)
                 capabilities = pipeline.load(model_path=model_path)
 
                 vram_after = torch.cuda.memory_allocated(self.gpu_id) if torch.cuda.is_available() else 0
@@ -325,6 +333,42 @@ class GpuWorker:
                 self.active_inferences -= 1
                 self.total_inferences += 1
 
+    def infer_batch(self, requests: list) -> list:
+        """
+        Run batch inference. All requests must target the same model.
+        Returns a list of result lists (one per request).
+        Falls back to sequential inference for non-text models.
+        """
+        if not requests:
+            return []
+
+        model_id = requests[0].get('model_id', '')
+        if model_id not in self.loaded_models:
+            return [
+                [InferenceResult(is_complete=True, finish_reason='ERROR')]
+                for _ in requests
+            ]
+
+        info = self.loaded_models[model_id]
+
+        # Only text_gen pipelines support batch inference
+        if info.model_type != 'text_gen' or not hasattr(info.pipeline, 'infer_batch'):
+            # Sequential fallback
+            results = []
+            for req in requests:
+                results.append(list(self.infer(req)))
+            return results
+
+        with self._lock:
+            self.active_inferences += len(requests)
+
+        try:
+            return info.pipeline.infer_batch(requests)
+        finally:
+            with self._lock:
+                self.active_inferences -= len(requests)
+                self.total_inferences += len(requests)
+
     # ================================================================
     # State
     # ================================================================
@@ -342,6 +386,8 @@ class GpuWorker:
             for info in self.loaded_models.values()
         ]
 
+        cache_stats = self.kv_store.stats()
+
         return {
             "worker_id": self.worker_id,
             "timestamp_ms": int(time.time() * 1000),
@@ -350,11 +396,15 @@ class GpuWorker:
             "active_inferences": self.active_inferences,
             "queued_inferences": 0,
             "cache_summary": {
-                "total_entries": 0,
-                "total_vram_bytes": 0,
-                "session_caches": 0,
+                "total_entries": cache_stats["entries"],
+                "total_vram_bytes": 0,  # Cache lives in CPU DRAM, not VRAM
+                "session_caches": cache_stats["entries"],
                 "prefix_caches": 0,
                 "document_caches": 0,
+                "total_dram_bytes": cache_stats["total_bytes"],
+                "hit_count": cache_stats["hit_count"],
+                "miss_count": cache_stats["miss_count"],
+                "hit_rate": cache_stats["hit_rate"],
             },
         }
 

@@ -68,6 +68,10 @@ describe('SchedulerService', () => {
     }).compile();
 
     scheduler = module.get<SchedulerService>(SchedulerService);
+
+    // Disable batching for scheduler unit tests — these test scheduling logic, not batching
+    const batchCollector = module.get<BatchCollector>(BatchCollector);
+    batchCollector.setConfig({ enabled: false });
   });
 
   afterEach(() => {

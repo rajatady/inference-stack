@@ -9,6 +9,7 @@ import { ImagesModule } from './images/images.module';
 import { AudioModule } from './audio/audio.module';
 import { VideoModule } from './video/video.module';
 import { Completion } from './completions/entities/completion.entity';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { Completion } from './completions/entities/completion.entity';
       rootPath: join(__dirname, '..', 'public'),
       serveRoot: '/',
     }),
+    MetricsModule,
     CompletionsModule,
     ImagesModule,
     AudioModule,

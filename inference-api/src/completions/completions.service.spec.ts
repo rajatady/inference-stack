@@ -4,6 +4,7 @@ import { CompletionsService } from './completions.service';
 import { Completion } from './entities/completion.entity';
 import { SchedulerService } from '../scheduler/scheduler.service';
 import { TokenizerService } from '../tokenizer/tokenizer.service';
+import { MetricsService } from '../metrics/metrics.service';
 
 describe('CompletionsService', () => {
   let service: CompletionsService;
@@ -38,6 +39,7 @@ describe('CompletionsService', () => {
         { provide: getRepositoryToken(Completion), useValue: mockRepo },
         { provide: SchedulerService, useValue: mockScheduler },
         { provide: TokenizerService, useValue: mockTokenizer },
+        { provide: MetricsService, useValue: { recordInference: jest.fn() } },
       ],
     }).compile();
 

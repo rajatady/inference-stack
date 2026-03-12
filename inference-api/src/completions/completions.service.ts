@@ -7,7 +7,9 @@ import { Completion } from './entities/completion.entity';
 import { CreateCompletionDto } from './dto/create-completion.dto';
 import { SchedulerService } from '../scheduler/scheduler.service';
 import { TokenizerService } from '../tokenizer/tokenizer.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { Priority } from '../scheduler/interfaces';
+import { getModelType } from '../config/model-roster';
 
 @Injectable()
 export class CompletionsService {
@@ -16,6 +18,7 @@ export class CompletionsService {
     private readonly completionRepo: Repository<Completion>,
     private readonly scheduler: SchedulerService,
     private readonly tokenizer: TokenizerService,
+    private readonly metricsService: MetricsService,
   ) {}
 
   /**
@@ -24,10 +27,14 @@ export class CompletionsService {
    */
   create(dto: CreateCompletionDto): { promise: Promise<any>; cancel: () => void } {
     const requestId = uuidv4();
+    const requestStartTime = Date.now();
+    const promptForDb = dto.messages?.length
+      ? JSON.stringify(dto.messages)
+      : dto.prompt || '';
     const entity = this.completionRepo.create({
       id: requestId,
       model: dto.model,
-      prompt: dto.prompt,
+      prompt: promptForDb,
       stream: false,
       status: 'pending',
       max_tokens: dto.max_tokens ?? 50,
@@ -51,8 +58,34 @@ export class CompletionsService {
         entity.prompt_tokens = result.usage?.prompt_tokens ?? 0;
         entity.completion_tokens = result.usage?.completion_tokens ?? 0;
         entity.total_tokens = result.usage?.total_tokens ?? 0;
+        entity.prefill_time_ms = result.usage?.prefill_time_ms ?? 0;
+        entity.decode_time_ms = result.usage?.decode_time_ms ?? 0;
+        entity.total_time_ms = result.usage?.total_time_ms ?? 0;
         entity.worker_id = result.workerId;
         await this.completionRepo.save(entity);
+
+        // Emit to ClickHouse (fire-and-forget)
+        this.metricsService.recordInference({
+          requestId,
+          model: dto.model,
+          modelType: getModelType(dto.model) ?? 'text_gen',
+          workerId: result.workerId ?? '',
+          prefillTimeMs: result.usage?.prefill_time_ms ?? 0,
+          decodeTimeMs: result.usage?.decode_time_ms ?? 0,
+          totalTimeMs: result.usage?.total_time_ms ?? 0,
+          queueWaitMs: result._timing?.queueWaitMs ?? 0,
+          routingTimeMs: result._timing?.routingTimeMs ?? 0,
+          e2eTimeMs: Date.now() - requestStartTime,
+          promptTokens: result.usage?.prompt_tokens ?? 0,
+          completionTokens: result.usage?.completion_tokens ?? 0,
+          cachedTokens: result.usage?.cached_tokens ?? 0,
+          userId: dto.user || 'anonymous',
+          priority: dto.priority || 'normal',
+          isStream: false,
+          finishReason: result.choices?.[0]?.finish_reason ?? '',
+          isError: false,
+        });
+
         // Override ID with entity's ID so the API consumer can fetch by it
         return { ...result, id: requestId };
       })
@@ -86,12 +119,16 @@ export class CompletionsService {
     dto: CreateCompletionDto,
   ): Promise<{ stream$: Observable<MessageEvent>; cancel: () => void }> {
     const requestId = uuidv4();
+    const requestStartTime = Date.now();
     const subject = new Subject<MessageEvent>();
 
+    const promptForDb = dto.messages?.length
+      ? JSON.stringify(dto.messages)
+      : dto.prompt || '';
     const entity = this.completionRepo.create({
       id: requestId,
       model: dto.model,
-      prompt: dto.prompt,
+      prompt: promptForDb,
       stream: true,
       status: 'streaming',
       max_tokens: dto.max_tokens ?? 50,
@@ -133,7 +170,32 @@ export class CompletionsService {
 
         entity.completion_text = result.choices?.[0]?.text ?? '';
         entity.status = 'completed';
+        entity.prefill_time_ms = result.usage?.prefill_time_ms ?? 0;
+        entity.decode_time_ms = result.usage?.decode_time_ms ?? 0;
+        entity.total_time_ms = result.usage?.total_time_ms ?? 0;
         await this.completionRepo.save(entity);
+
+        // Emit to ClickHouse (fire-and-forget)
+        this.metricsService.recordInference({
+          requestId,
+          model: dto.model,
+          modelType: getModelType(dto.model) ?? 'text_gen',
+          workerId: result.workerId ?? '',
+          prefillTimeMs: result.usage?.prefill_time_ms ?? 0,
+          decodeTimeMs: result.usage?.decode_time_ms ?? 0,
+          totalTimeMs: result.usage?.total_time_ms ?? 0,
+          queueWaitMs: result._timing?.queueWaitMs ?? 0,
+          routingTimeMs: result._timing?.routingTimeMs ?? 0,
+          e2eTimeMs: Date.now() - requestStartTime,
+          promptTokens: result.usage?.prompt_tokens ?? 0,
+          completionTokens: result.usage?.completion_tokens ?? 0,
+          cachedTokens: result.usage?.cached_tokens ?? 0,
+          userId: dto.user || 'anonymous',
+          priority: dto.priority || 'normal',
+          isStream: true,
+          finishReason: result.choices?.[0]?.finish_reason ?? '',
+          isError: false,
+        });
       })
       .catch((err) => {
         subject.next({

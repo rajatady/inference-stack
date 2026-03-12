@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { of } from 'rxjs';
 import { AudioService } from './audio.service';
 import { Router } from '../worker-orchestrator/router';
+import { MetricsService } from '../metrics/metrics.service';
 
 describe('AudioService', () => {
   let service: AudioService;
@@ -27,6 +28,7 @@ describe('AudioService', () => {
             }),
           },
         },
+        { provide: MetricsService, useValue: { recordInference: jest.fn() } },
       ],
     }).compile();
 

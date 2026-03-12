@@ -11,6 +11,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { CompletionsService } from './completions.service';
 import { CreateCompletionDto } from './dto/create-completion.dto';
 import { SchedulerService } from '../scheduler/scheduler.service';
@@ -40,11 +41,16 @@ export class CompletionsController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    if (!dto.prompt) {
+    if (!dto.prompt && (!dto.messages || dto.messages.length === 0)) {
       throw new HttpException(
-        { error: { message: 'prompt is required', type: 'invalid_request_error' } },
+        { error: { message: 'prompt or messages is required', type: 'invalid_request_error' } },
         HttpStatus.BAD_REQUEST,
       );
+    }
+
+    // Auto-generate session_id if not provided (for KV cache reuse)
+    if (!dto.session_id) {
+      dto.session_id = uuidv4();
     }
 
     if (dto.stream) {
@@ -97,7 +103,7 @@ export class CompletionsController {
 
       try {
         const result = await promise;
-        res.json(result);
+        res.json({ ...result, session_id: dto.session_id });
       } catch (err) {
         if (err instanceof HttpException) {
           const status = err.getStatus();

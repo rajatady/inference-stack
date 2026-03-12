@@ -128,7 +128,16 @@ class InferenceWorkerServicer(pb2_grpc.InferenceWorkerServicer):
                 "temperature": request.params.temperature if request.params else 1.0,
                 "top_p": request.params.top_p if request.params else 1.0,
             } if request.params else {},
+            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "cache_hint": {
+                "session_id": request.cache_hint.session_id if request.HasField("cache_hint") else "",
+                "prefix_hash": request.cache_hint.prefix_hash if request.HasField("cache_hint") else "",
+            },
         }
+
+        # Forward new_prompt for cache-aware token alignment
+        if request.HasField("cache_hint") and request.cache_hint.session_id:
+            infer_request["new_prompt"] = request.prompt
 
         # Pass image data for vision-language models
         if request.image_data:
@@ -152,6 +161,17 @@ class InferenceWorkerServicer(pb2_grpc.InferenceWorkerServicer):
                         ),
                     )
                 else:
+                    # Build cache info from result
+                    cache_info = None
+                    if result.cache_hit or result.cached_tokens > 0 or result.cache_size_bytes > 0:
+                        session_id = (request.cache_hint.session_id
+                                      if request.HasField("cache_hint") else "")
+                        cache_info = pb2.CacheInfo(
+                            cache_id=session_id,
+                            cached_tokens=result.cached_tokens,
+                            new_tokens=result.prompt_tokens - result.cached_tokens,
+                            cache_size_bytes=result.cache_size_bytes,
+                        )
                     yield pb2.InferResponse(
                         request_id=request.request_id,
                         complete=pb2.InferComplete(
@@ -159,11 +179,14 @@ class InferenceWorkerServicer(pb2_grpc.InferenceWorkerServicer):
                             usage=pb2.UsageStats(
                                 prompt_tokens=result.prompt_tokens,
                                 completion_tokens=result.completion_tokens,
-                                cached_tokens=0,
+                                cached_tokens=result.cached_tokens,
                                 prefill_time_ms=result.prefill_time_ms,
                                 decode_time_ms=result.decode_time_ms,
                                 total_time_ms=result.total_time_ms,
+                                cache_load_ms=result.cache_load_ms,
+                                cache_save_ms=result.cache_save_ms,
                             ),
+                            cache_info=cache_info,
                         ),
                     )
             elif result.media_data is not None:
@@ -185,6 +208,122 @@ class InferenceWorkerServicer(pb2_grpc.InferenceWorkerServicer):
                         text=result.chunk_text or "",
                     ),
                 )
+
+    def BatchInfer(self, request, context):
+        """Batch inference: process multiple requests in a single GPU batch."""
+        if not request.requests:
+            return
+
+        # Validate all requests target the same model
+        model_id = request.requests[0].model_id
+        for req in request.requests:
+            if req.model_id != model_id:
+                for r in request.requests:
+                    yield pb2.InferResponse(
+                        request_id=r.request_id,
+                        error=pb2.InferError(
+                            code=pb2.INVALID_INPUT,
+                            message="All requests in a batch must target the same model",
+                            retriable=False,
+                        ),
+                    )
+                return
+
+        # Check model is loaded
+        if model_id not in self.worker.loaded_models:
+            for req in request.requests:
+                yield pb2.InferResponse(
+                    request_id=req.request_id,
+                    error=pb2.InferError(
+                        code=pb2.MODEL_NOT_LOADED,
+                        message=f"Model {model_id} is not loaded on this worker",
+                        retriable=False,
+                    ),
+                )
+            return
+
+        # Build request dicts
+        infer_requests = []
+        for req in request.requests:
+            infer_requests.append({
+                'request_id': req.request_id,
+                'model_id': req.model_id,
+                'prompt': req.prompt,
+                'token_ids': list(req.token_ids) if req.token_ids else [],
+                'params': {
+                    'max_tokens': req.params.max_tokens if req.params else 50,
+                    'temperature': req.params.temperature if req.params else 1.0,
+                    'top_p': req.params.top_p if req.params else 1.0,
+                } if req.params else {},
+                'messages': [{'role': m.role, 'content': m.content} for m in req.messages],
+                'cache_hint': {
+                    'session_id': req.cache_hint.session_id if req.HasField('cache_hint') else '',
+                },
+            })
+
+        try:
+            batch_results = self.worker.infer_batch(infer_requests)
+        except Exception as e:
+            logger.error(f"Batch inference failed: {e}")
+            for req in request.requests:
+                yield pb2.InferResponse(
+                    request_id=req.request_id,
+                    error=pb2.InferError(
+                        code=pb2.INTERNAL,
+                        message=f"Batch inference failed: {str(e)}",
+                        retriable=True,
+                    ),
+                )
+            return
+
+        # Yield results for each request
+        for i, (req, results) in enumerate(zip(request.requests, batch_results)):
+            if not context.is_active():
+                return
+
+            for result in results:
+                if result.is_complete:
+                    if result.finish_reason == 'ERROR':
+                        yield pb2.InferResponse(
+                            request_id=req.request_id,
+                            error=pb2.InferError(
+                                code=pb2.INTERNAL,
+                                message="Inference failed",
+                                retriable=True,
+                            ),
+                        )
+                    else:
+                        yield pb2.InferResponse(
+                            request_id=req.request_id,
+                            complete=pb2.InferComplete(
+                                finish_reason=_finish_reason_to_enum(result.finish_reason),
+                                usage=pb2.UsageStats(
+                                    prompt_tokens=result.prompt_tokens,
+                                    completion_tokens=result.completion_tokens,
+                                    cached_tokens=0,
+                                    prefill_time_ms=result.prefill_time_ms,
+                                    decode_time_ms=result.decode_time_ms,
+                                    total_time_ms=result.total_time_ms,
+                                ),
+                            ),
+                        )
+                elif result.media_data is not None:
+                    yield pb2.InferResponse(
+                        request_id=req.request_id,
+                        media=pb2.MediaOutput(
+                            data=result.media_data,
+                            mime_type=result.media_mime_type or "",
+                            is_final=result.is_media_final,
+                        ),
+                    )
+                else:
+                    yield pb2.InferResponse(
+                        request_id=req.request_id,
+                        chunk=pb2.TokenChunk(
+                            token_ids=result.chunk_token_ids or [],
+                            text=result.chunk_text or "",
+                        ),
+                    )
 
     def GetCacheEntries(self, request, context):
         return pb2.CacheEntriesResponse(entries=[])

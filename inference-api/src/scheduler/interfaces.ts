@@ -11,12 +11,15 @@ export interface SchedulerConfig {
   maxQueueDepth: number;
   maxQueuedTokens: number;
   agingBoostPerSecond: number;
+  /** Per-request timeout in ms. 0 = no timeout. Default: 60s. */
+  requestTimeoutMs: number;
 }
 
 export const DEFAULT_SCHEDULER_CONFIG: SchedulerConfig = {
   maxQueueDepth: 100,
   maxQueuedTokens: 50_000,
   agingBoostPerSecond: 0.1,
+  requestTimeoutMs: 60_000,
 };
 
 export type RequestState =
@@ -25,7 +28,8 @@ export type RequestState =
   | 'active'
   | 'completed'
   | 'error'
-  | 'cancelled';
+  | 'cancelled'
+  | 'timeout';
 
 export interface QueuedRequest {
   id: string;
@@ -39,4 +43,10 @@ export interface QueuedRequest {
   resolve: (value: any) => void;
   reject: (reason: any) => void;
   subscription?: Subscription;
+  /** Timestamp when dispatchRequest() starts (for gateway timing) */
+  dispatchStartTime?: number;
+  /** Time spent routing (dispatch start → worker.infer() called) */
+  routingTimeMs?: number;
+  /** Timer handle for per-request timeout */
+  timeoutTimer?: ReturnType<typeof setTimeout>;
 }

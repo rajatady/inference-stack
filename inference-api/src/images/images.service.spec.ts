@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { of } from 'rxjs';
 import { ImagesService } from './images.service';
 import { Router } from '../worker-orchestrator/router';
+import { MetricsService } from '../metrics/metrics.service';
 
 describe('ImagesService', () => {
   let service: ImagesService;
@@ -27,6 +28,7 @@ describe('ImagesService', () => {
             }),
           },
         },
+        { provide: MetricsService, useValue: { recordInference: jest.fn() } },
       ],
     }).compile();
 

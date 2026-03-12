@@ -31,6 +31,12 @@ class InferenceResult:
     prefill_time_ms: float = 0.0
     decode_time_ms: float = 0.0
     total_time_ms: float = 0.0
+    # KV cache fields (disaggregated CPU DRAM cache)
+    cache_hit: bool = False
+    cache_load_ms: float = 0.0
+    cache_save_ms: float = 0.0
+    cache_size_bytes: int = 0
+    cached_tokens: int = 0
 
 
 class BasePipeline(ABC):

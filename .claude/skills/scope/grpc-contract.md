@@ -24,6 +24,10 @@ service InferenceWorker {
   // Client-side cancellation: gateway cancels the RPC context → worker stops generation.
   rpc Infer (InferRequest) returns (stream InferResponse);
 
+  // Run batch inference. Multiple requests processed as single batched model.generate() call.
+  // All requests must target the same model. Results tagged by request_id for demuxing.
+  rpc BatchInfer (BatchInferRequest) returns (stream InferResponse);
+
   // === Model Management ===
 
   // Load a model onto this worker's GPU. Blocking — returns when model is ready.
@@ -77,6 +81,18 @@ message InferRequest {
 
   // KV cache hint — tells the worker to look for/create a cache with this key
   CacheHint cache_hint = 6;
+
+  // Multi-modal input
+  bytes image_data = 7;              // Raw image bytes for vision-language models
+  string image_mime_type = 8;        // "image/jpeg", "image/png", etc.
+
+  // Chat messages (instruct models) — worker applies chat template
+  repeated ChatMessage messages = 9;
+}
+
+message ChatMessage {
+  string role = 1;                   // "system", "user", "assistant"
+  string content = 2;               // Message text
 }
 
 message GenerationParams {
@@ -158,6 +174,8 @@ message UsageStats {
   float prefill_time_ms = 4;       // Time to process input (prefill phase)
   float decode_time_ms = 5;        // Time to generate output (decode phase)
   float total_time_ms = 6;         // Wall clock total
+  float cache_load_ms = 7;         // CPU DRAM → GPU transfer time (disaggregated KV cache)
+  float cache_save_ms = 8;         // GPU → CPU DRAM transfer time (disaggregated KV cache)
 }
 
 message CacheInfo {
@@ -402,7 +420,7 @@ Polling `GetWorkerState` introduces staleness. `WatchWorkerState` gives the gate
 
 ---
 
-## Planned Multi-Modal Extensions (Approved, Not Yet Implemented)
+## Multi-Modal Extensions (IMPLEMENTED)
 
 The following proto changes are planned for multi-modal support (6 models, 5 modalities). All are backward-compatible in proto3 (new optional fields).
 

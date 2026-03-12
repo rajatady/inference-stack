@@ -6,6 +6,10 @@ service InferenceWorker {
   // Run inference. Returns a stream of tokens.
   rpc Infer (InferRequest) returns (stream InferResponse);
 
+  // Run batch inference. Multiple requests processed in a single GPU batch.
+  // Returns a stream of InferResponse — use request_id to demux per-request results.
+  rpc BatchInfer (BatchInferRequest) returns (stream InferResponse);
+
   // Load a model onto this worker's GPU.
   rpc LoadModel (LoadModelRequest) returns (LoadModelResponse);
 
@@ -32,6 +36,11 @@ service InferenceWorker {
 // Inference
 // ============================================================
 
+message ChatMessage {
+  string role = 1;                 // "system", "user", "assistant"
+  string content = 2;
+}
+
 message InferRequest {
   string request_id = 1;
   string model_id = 2;
@@ -41,6 +50,11 @@ message InferRequest {
   CacheHint cache_hint = 6;
   bytes image_data = 7;            // Raw image bytes (JPEG/PNG) for vision-language models
   string image_mime_type = 8;      // "image/jpeg", "image/png", etc.
+  repeated ChatMessage messages = 9; // Chat messages for instruct models (takes precedence over prompt)
+}
+
+message BatchInferRequest {
+  repeated InferRequest requests = 1;
 }
 
 message GenerationParams {
@@ -100,6 +114,8 @@ message UsageStats {
   float prefill_time_ms = 4;
   float decode_time_ms = 5;
   float total_time_ms = 6;
+  float cache_load_ms = 7;   // CPU DRAM → GPU transfer time
+  float cache_save_ms = 8;   // GPU → CPU DRAM transfer time
 }
 
 message CacheInfo {

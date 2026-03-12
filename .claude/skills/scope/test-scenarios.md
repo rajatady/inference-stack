@@ -88,7 +88,7 @@ These are the architectural invariants the system must exhibit. Each is an integ
 **Setup**: Batch of 4 running. Request 2 finishes (short output). Request 5 is queued.
 **Invariant**: Request 5 joins the batch in request 2's slot without waiting for requests 1, 3, 4 to finish.
 **Why it's hard**: Mid-batch modification of batch composition. KV cache management during slot swap.
-**Status**: SKIPPED — Requires changes to the Python GPU worker to support mid-batch slot insertion. The current worker processes one request at a time per inference call. Continuous batching needs the worker to manage a batch slot table and accept new requests into running batches. Deferred to future Python worker iteration. Test placeholder exists in `test/integration/batching.spec.ts` (skipped).
+**Status**: PARTIALLY IMPLEMENTED — GPU-side static batching is implemented (BatchInfer RPC: left-padded tensor batching via `model.generate()`, all requests in batch start and finish together). True continuous batching (mid-batch slot reclamation) still requires Python worker to manage a batch slot table and accept new requests into running batches. Current batching gives 158x throughput improvement at c=8 (2→316 TPS) but wastes GPU cycles when short requests finish before long ones in the same batch. Test placeholder exists in `test/integration/batching.spec.ts` (skipped for continuous batching, static batching tested via load tests).
 
 ### T13. Batch compatibility filtering
 **Setup**: 3 requests for same model. Two have 500-token inputs, one has 50K-token input.
@@ -175,7 +175,7 @@ These are the architectural invariants the system must exhibit. Each is an integ
 | T9 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts + test/e2e/inference-api.e2e-spec.ts |
 | T10 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts |
 | T11 | IMPLEMENTED | test/integration/batching.spec.ts |
-| T12 | SKIPPED | test/integration/batching.spec.ts (placeholder, needs Python worker changes) |
+| T12 | PARTIALLY IMPLEMENTED | test/integration/batching.spec.ts (static batching done, continuous batching deferred) |
 | T13 | IMPLEMENTED | test/integration/batching.spec.ts |
 | T14 | NOT STARTED | — (requires OOM retry logic) |
 | T15 | NOT STARTED | — (requires KV cache manager + session tracking) |
@@ -187,7 +187,7 @@ These are the architectural invariants the system must exhibit. Each is an integ
 | T21 | NOT STARTED | — (requires distributed tracing) |
 | T22 | PARTIALLY IMPLEMENTED | — (basic estimate exists, accuracy improvement deferred) |
 
-**Score: 7 implemented + 1 skipped + 2 partial + 12 not started = 22 total scenarios**
+**Score: 7 implemented + 0 skipped + 3 partial + 12 not started = 22 total scenarios**
 
 ---
 
@@ -222,3 +222,102 @@ These are the architectural invariants the system must exhibit. Each is an integ
 **Invariant**: Text request routes to worker-0 (has text model), image request routes to worker-1 (has image model). No unnecessary model loading/unloading.
 **Why it's hard**: Router must check model affinity across multiple workers before triggering a load.
 **Status**: IMPLEMENTED — Router.route() checks all workers via WorkerRegistry.getSnapshots(), prefers worker already holding the model, falls back to ModelManager.loadOnBestWorker() with GPU affinity. Verified via E2E tests with concurrent text + image requests routing to correct workers.
+
+---
+
+## Observability & Performance (T28-T33) — IMPLEMENTED
+
+### T28. ClickHouse metrics pipeline end-to-end
+**Setup**: POST /v1/completions → ClickHouse should have a row with timing + token + TPS data.
+**Invariant**: Every inference request produces exactly one row in `inference.inference_metrics` with non-zero GPU timing, gateway timing, token counts, and computed TPS.
+**Status**: IMPLEMENTED — MetricsService.recordInference() inserts fire-and-forget into ClickHouse. All 5 service files (completions, images, audio, video + scheduler) call it. Bug found: ISO timestamps broke ClickHouse parsing — fixed with epoch seconds. 91 rows verified after load test.
+
+### T29. Concurrency scaling measurement
+**Setup**: Fire 8 requests at concurrency 1, 2, 4, 8 to SmolLM2-135M.
+**Invariant**: With GPU-side batching, TPS should scale with concurrency. Without batching, TPS degrades linearly.
+**Measured (before batching)**: c1=41 TPS/934ms, c2=20 TPS/1649ms, c4=7.2 TPS/3416ms, c8=2.2 TPS/10100ms. Linear degradation — each concurrent request queues behind others.
+**Measured (after batching)**: c1=44 TPS, c8=316 TPS. TPS now scales linearly with concurrency. 158x improvement at c=8.
+**Status**: IMPLEMENTED — `test/load/load-test.spec.ts` S2.
+
+### T30. Prefix sharing waste quantification
+**Setup**: 20 sequential requests with identical 134-token system prompt + unique 20-token query.
+**Invariant**: Total prefill time should be ~20× single prefill. With KV cache prefix sharing, it would be ~1×.
+**Measured**: 750ms total prefill, 30ms for first request. 96.1% wasted (721ms). With prefix cache: only 30ms needed.
+**Status**: IMPLEMENTED — `test/load/load-test.spec.ts` S3.
+
+### T31. Multi-turn recompute cost
+**Setup**: 5-turn conversation, each turn sends full history (135→352 tokens growing).
+**Invariant**: Prefill grows with context length. Decode stays constant (~40 TPS). Cumulative recompute waste measurable.
+**Measured**: Prefill TPS increases with prompt length (249→8309 — GPU more efficient on larger batches). Decode stable at ~40 TPS/~500ms. Cumulative prefill waste: 142ms. Decode dominates (92% of GPU time).
+**Status**: IMPLEMENTED — `test/load/load-test.spec.ts` S4.
+
+### T32. Sustained load stability
+**Setup**: 20 requests @ 1 rps to SmolLM2-135M.
+**Invariant**: p95 latency should stay stable (no drift). Queue depth should not grow unboundedly. Zero errors under sustainable load.
+**Measured**: Stable p50≈944ms, 0 errors, queue depth bounded.
+**Status**: IMPLEMENTED — `test/load/load-test.spec.ts` S5.
+
+### T33. Cross-model contention (text + image)
+**Setup**: 3 text requests (GPU-0) + 2 image requests (GPU-1) fired concurrently.
+**Invariant**: Text TPS should not degrade when image gen runs on a different GPU.
+**Measured**: Text-only=11.5 TPS, text+image=11.7 TPS. <2% impact — different GPUs, no interference.
+**Status**: IMPLEMENTED — `test/load/load-test.spec.ts` S6.
+
+---
+
+## Category: Disaggregated KV Cache (Added 2026-03-12)
+
+### T34. Recompute vs Cache Transfer Cost (S14)
+**Setup**: SmolLM2-1.7B-Instruct, 10-turn conversation. Phase A: no session_id (full recompute each turn). Phase B: with session_id (KV cache stored in CPU DRAM, loaded on subsequent turns).
+**Invariant**: Phase B should show cache hits on turns 2-10 with measurable compute savings. Cache load (PCIe transfer) should be cheaper than recompute at sufficient context length.
+**Measured**: 9/10 cache hits (Turn 1 always cold start). 14.1% average compute savings. Crossover at ~800 tokens — below this, recompute is cheaper than cache load overhead. Cache load: 0-33ms. Cache save: 45-263ms (post-generation, not user-facing).
+**Status**: IMPLEMENTED — `test/load/load-test.spec.ts` S14. KVCacheStore in `gpu-worker/kv_cache_store.py`, DynamicCache integration in `gpu-worker/pipelines/text_gen.py`, session routing via `session_id` on DTO through NestJS scheduler to gRPC `cache_hint`.
+
+### T35. Concurrent Session Caching (S15)
+**Setup**: 5 sessions × 3 turns each, unique session_ids, SmolLM2-1.7B-Instruct. Real conversation data (different slices).
+**Invariant**: Each session gets cache hits on turns 2-3. Total DRAM usage scales linearly with sessions. No cross-session cache corruption.
+**Status**: IMPLEMENTED (test written) — `test/load/load-test.spec.ts` S15. Not yet run against GPUs.
+
+### T36. Cache Eviction Under Budget Constraint (S16)
+**Setup**: KVCacheStore set to 500MB budget (fits ~2-3 sessions of 1.7B at 1K tokens). Create 8 sessions → LRU eviction kicks in after 2-3.
+**Invariant**: Revisiting evicted sessions shows cache miss + recompute. Non-evicted (recently used) sessions still have cache hits. LRU ordering is correct.
+**Status**: IMPLEMENTED (test written) — `test/load/load-test.spec.ts` S16. Not yet run against GPUs.
+
+---
+
+## Implementation Summary
+
+| Scenario | Status | Test File |
+|---|---|---|
+| T1-T4 | NOT STARTED | — (requires KV cache-aware routing in NestJS router) |
+| T5-T6 | NOT STARTED | — (requires eviction cascading protection) |
+| T7 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts |
+| T8 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts |
+| T9 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts + test/e2e/inference-api.e2e-spec.ts |
+| T10 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts |
+| T11 | IMPLEMENTED | test/integration/batching.spec.ts |
+| T12 | PARTIALLY IMPLEMENTED | test/integration/batching.spec.ts (static batching done, continuous batching deferred) |
+| T13 | IMPLEMENTED | test/integration/batching.spec.ts |
+| T14 | NOT STARTED | — (requires OOM retry logic) |
+| T15 | NOT STARTED | — (requires KV cache manager + session tracking) |
+| T16 | IMPLEMENTED | test/integration/cancel-disconnect.spec.ts + test/e2e/inference-api.e2e-spec.ts |
+| T17 | NOT STARTED | — (requires KV cache manager + cost accounting) |
+| T18 | NOT STARTED | — (requires deduplication layer) |
+| T19 | PARTIALLY IMPLEMENTED | test/integration/tokenization.spec.ts (validation exists, not wired into admission) |
+| T20 | NOT STARTED | — (requires speculative decoding) |
+| T21 | NOT STARTED | — (requires distributed tracing) |
+| T22 | PARTIALLY IMPLEMENTED | — (basic estimate exists, accuracy improvement deferred) |
+| T23-T27 | IMPLEMENTED | test/e2e/inference-api.e2e-spec.ts + integration tests |
+| T28-T33 | IMPLEMENTED | test/load/load-test.spec.ts (S1-S6) |
+| T34 | IMPLEMENTED | test/load/load-test.spec.ts (S14) |
+| T35 | IMPLEMENTED (test written, not run) | test/load/load-test.spec.ts (S15) |
+| T36 | IMPLEMENTED (test written, not run) | test/load/load-test.spec.ts (S16) |
+
+**Score: 18 implemented + 2 written-not-run + 3 partial + 12 not started = 35 total scenarios**
+
+---
+
+## Changelog
+
+- **2026-03-12**: Added T28-T33 (observability + performance scenarios). All implemented via ClickHouse metrics pipeline + load test suite. Key finding: decode is 92% of GPU time, prefix sharing saves 96% of prefill but prefill is only 5% of total. Continuous batching would be the bigger win over KV cache alone.
+- **2026-03-12**: Added T34-T36 (disaggregated KV cache scenarios). T34 (recompute vs cache transfer) implemented and verified — 9/10 cache hits, 14.1% savings, crossover at ~800 tokens. T35 (concurrent sessions) and T36 (eviction under budget) tests written but not yet run against GPUs. KV cache stored in CPU DRAM on GPU worker (in-process Python memory), session routing via session_id through NestJS scheduler to gRPC cache_hint. Critical discovery: transformers v5.3.0 uses DynamicCache.layers (not key_cache/value_cache) — both APIs handled in kv_cache_store.py.

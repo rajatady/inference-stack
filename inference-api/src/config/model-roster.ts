@@ -21,14 +21,19 @@ export interface ModelRosterEntry {
 }
 
 export const MODEL_ROSTER: Record<string, ModelRosterEntry> = {
-  'HuggingFaceTB/SmolLM2-135M': {
+  'HuggingFaceTB/SmolLM2-135M-Instruct': {
     type: 'text_gen',
     vramEstimateBytes: 0.3e9,
     defaultGpu: 'worker-0',
   },
-  'HuggingFaceTB/SmolLM2-360M': {
+  'HuggingFaceTB/SmolLM2-360M-Instruct': {
     type: 'text_gen',
     vramEstimateBytes: 0.7e9,
+    defaultGpu: 'worker-0',
+  },
+  'HuggingFaceTB/SmolLM2-1.7B-Instruct': {
+    type: 'text_gen',
+    vramEstimateBytes: 3.5e9,
     defaultGpu: 'worker-0',
   },
   'Qwen/Qwen2.5-VL-3B-Instruct': {

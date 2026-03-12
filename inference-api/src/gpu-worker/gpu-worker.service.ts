@@ -12,6 +12,7 @@ interface InferenceWorkerGrpc {
   getWorkerState(data: Record<string, never>): Observable<any>;
   watchWorkerState(data: any): Observable<any>;
   infer(data: any): Observable<any>;
+  batchInfer(data: any): Observable<any>;
   getCacheEntries(data: any): Observable<any>;
   evictCache(data: any): Observable<any>;
 }
@@ -80,6 +81,22 @@ export class GpuWorkerService {
     };
   }): Observable<any> {
     return this.worker.infer(request);
+  }
+
+  batchInfer(request: {
+    requests: Array<{
+      request_id: string;
+      model_id: string;
+      token_ids?: number[];
+      prompt?: string;
+      params?: {
+        max_tokens?: number;
+        temperature?: number;
+        top_p?: number;
+      };
+    }>;
+  }): Observable<any> {
+    return this.worker.batchInfer(request);
   }
 
   getCacheEntries(request: {

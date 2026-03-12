@@ -9,13 +9,15 @@ export interface BatchConfig {
   maxSeqLengthRatio: number;
   /** Whether batching is enabled */
   enabled: boolean;
+  /** Called when a batch of >1 requests is ready. If not set, falls back to individual dispatch. */
+  batchDispatch?: (requests: BatchableRequest[]) => void;
 }
 
 export const DEFAULT_BATCH_CONFIG: BatchConfig = {
-  windowMs: 10,
-  maxBatchSize: 4,
+  windowMs: 50,
+  maxBatchSize: 256,
   maxSeqLengthRatio: 4.0,
-  enabled: false,
+  enabled: true,
 };
 
 export interface BatchableRequest {
@@ -23,6 +25,8 @@ export interface BatchableRequest {
   modelId: string;
   estimatedTokens: number;
   dispatch: () => void;
+  /** Opaque reference to the original request — used by batchDispatch */
+  context?: any;
 }
 
 interface Bucket {
@@ -132,8 +136,12 @@ export class BatchCollector {
       `Dispatching batch of ${requests.length} for model ${modelId}`,
     );
 
-    for (const req of requests) {
-      req.dispatch();
+    if (requests.length > 1 && this.config.batchDispatch) {
+      this.config.batchDispatch(requests);
+    } else {
+      for (const req of requests) {
+        req.dispatch();
+      }
     }
   }
 

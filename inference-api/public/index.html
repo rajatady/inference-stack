@@ -710,9 +710,10 @@
           <div class="field">
             <div class="field-label">Model</div>
             <select id="model-select">
-              <optgroup label="Text Generation">
-                <option value="HuggingFaceTB/SmolLM2-135M">SmolLM2-135M</option>
-                <option value="HuggingFaceTB/SmolLM2-360M">SmolLM2-360M</option>
+              <optgroup label="Text Generation (Instruct)">
+                <option value="HuggingFaceTB/SmolLM2-135M-Instruct">SmolLM2-135M-Instruct</option>
+                <option value="HuggingFaceTB/SmolLM2-360M-Instruct">SmolLM2-360M-Instruct</option>
+                <option value="HuggingFaceTB/SmolLM2-1.7B-Instruct">SmolLM2-1.7B-Instruct</option>
               </optgroup>
               <optgroup label="Vision-Language">
                 <option value="Qwen/Qwen2.5-VL-3B-Instruct">Qwen2.5-VL-3B</option>
@@ -808,12 +809,21 @@
       </div>
 
       <div class="input-area">
+        <div id="system-prompt-row" style="margin-bottom:10px;">
+          <div style="font-family:var(--mono); font-size:10px; color:var(--text-muted); margin-bottom:4px; letter-spacing:0.5px; text-transform:uppercase;">System Prompt</div>
+          <textarea
+            id="system-prompt"
+            rows="2"
+            placeholder="You are a helpful assistant."
+            style="width:100%; resize:none; background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; font-family:var(--mono); font-size:12px; color:var(--text-primary); outline:none; min-height:36px; max-height:80px;"
+          ></textarea>
+        </div>
         <div class="input-row">
           <div class="input-wrapper">
             <textarea
               id="prompt-input"
               rows="2"
-              placeholder="Enter your prompt..."
+              placeholder="Enter your message..."
             ></textarea>
           </div>
           <button class="send-btn" id="send-btn">
@@ -831,8 +841,9 @@
   <script>
     // Model type mapping
     const MODEL_TYPES = {
-      'HuggingFaceTB/SmolLM2-135M': 'text_gen',
-      'HuggingFaceTB/SmolLM2-360M': 'text_gen',
+      'HuggingFaceTB/SmolLM2-135M-Instruct': 'text_gen',
+      'HuggingFaceTB/SmolLM2-360M-Instruct': 'text_gen',
+      'HuggingFaceTB/SmolLM2-1.7B-Instruct': 'text_gen',
       'Qwen/Qwen2.5-VL-3B-Instruct': 'vision_language',
       'hexgrad/Kokoro-82M': 'tts',
       'stabilityai/sd-turbo': 'image_gen',
@@ -1021,10 +1032,15 @@
       } else if (modelType === 'video_gen') {
         await sendVideoGen(card, { model, prompt });
       } else {
-        // text_gen or vision_language
+        // text_gen or vision_language — use messages format
+        const systemPrompt = document.getElementById('system-prompt').value.trim();
+        const messages = [];
+        if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+        messages.push({ role: 'user', content: prompt });
+
         const params = {
           model,
-          prompt,
+          messages,
           max_tokens: parseInt(tokensSlider.value),
           temperature: parseFloat(tempSlider.value),
           top_p: parseFloat(topPSlider.value),

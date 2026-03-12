@@ -100,3 +100,52 @@ Moving a KV cache between GPUs:
 - Expensive in bandwidth and latency
 - Only worthwhile for very large caches (100K+ tokens) where recompute would be worse
 - Not a V1 feature — recompute is simpler and sufficient initially
+
+---
+
+## Disaggregated KV Cache — CPU DRAM Persistence (IMPLEMENTED)
+
+### Why Disaggregate to CPU DRAM
+
+GPUs become stateless. KV cache stored in CPU RAM, loaded to any GPU on demand via PCIe.
+
+- **VRAM is scarce** (~16GB free on RTX A4500) — holds ~40 sessions at 384MB each (1.7B model, 2K tokens)
+- **DRAM is abundant** (~251GB on RunPod) — holds ~1,300 sessions
+- **PCIe transfer** (~25ms for 384MB) is **7x cheaper** than recompute (~174ms for 2K tokens at 1.7B)
+- Enables 1-hour TTL caching like Anthropic's prompt caching (0.1x price for cached tokens)
+
+### KV Cache Math (1.7B model)
+
+- **192 KB/token**: 24 layers × 32 KV heads × 64 head_dim × 2 bytes (FP16) × 2 (K+V)
+- At 2K tokens: **384 MB** per session
+- PCIe 4.0 transfer: ~15-22 GB/s → ~25ms to move 384MB
+- Recompute 2K tokens: ~174ms (measured in S13d)
+- **Crossover point**: ~800 tokens — below this, recompute is cheaper than cache load
+
+### Implementation
+
+**`gpu-worker/kv_cache_store.py`**: CPU DRAM-backed store with LRU eviction. Thread-safe (`threading.Lock` + `OrderedDict`). Handles:
+- transformers v5.x: `DynamicCache.layers` → list of `DynamicLayer` objects with `.keys`/`.values` tensor attributes
+- transformers v4.x: `DynamicCache.key_cache`/`.value_cache` lists
+- Legacy tuple format: `((k, v), (k, v), ...)`
+
+`save()`: Iterates layers, calls `.cpu()` on each K/V tensor, tracks total bytes. LRU eviction when over budget (default 200GB of 251GB).
+`load()`: Builds `DynamicCache()`, calls `cache.update(k_gpu, v_gpu, layer_idx)` per layer, moves tensors to GPU with `.to(device, non_blocking=True)`, `torch.cuda.synchronize()`.
+
+**`gpu-worker/pipelines/text_gen.py`**: `infer()` rewritten — before generate: check `cache_hint.session_id` → `kv_store.load()`. On cache hit, tokenize only new tokens (`request["new_prompt"]`), pass `past_key_values=restored_cache`. Uses `return_dict_in_generate=True` to extract `past_key_values` from output. After generate: `kv_store.save()`. `infer_batch()` deliberately skips KV cache — can't batch per-request past_key_values with different sequence lengths.
+
+**NestJS Gateway**: `session_id` on `CreateCompletionDto`, auto-generated via `uuidv4()` in controller, forwarded through `SchedulerService.dispatchRequest()`/`dispatchBatch()` into gRPC `cache_hint`. `cache_load_ms`/`cache_save_ms` extracted from worker response.
+
+### Measured Results (S14 — SmolLM2-1.7B-Instruct)
+
+- 9/10 cache hits (Turn 1 always cold start)
+- 14.1% average compute savings across 10 turns
+- Cache load: 0-33ms, Cache save: 45-263ms (post-generation, not user-facing)
+- At <2K tokens, savings modest — real cost case emerges with longer contexts and Anthropic's 0.1x cached pricing
+
+### Remaining Work
+
+- **Cache-aware routing** (T1-T2): NestJS router picks GPU with warm cache for session_id
+- **Prefix sharing** (T3): Compute KV once for shared system prompts, reuse across requests
+- **Eviction cascading protection** (T4-T6): Dampening, rate limiting, grace periods
+- **Gateway-level cache registry**: NestJS tracks which sessions are cached on which worker, for routing decisions without round-tripping to GPU worker

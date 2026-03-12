@@ -85,7 +85,7 @@ describe('CompletionsController', () => {
       );
 
       expect(mockService.create).toHaveBeenCalled();
-      expect(res.json).toHaveBeenCalledWith({ id: '1', choices: [] });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ id: '1', choices: [] }));
       expect(res.on).toHaveBeenCalledWith('close', expect.any(Function));
     });
 
