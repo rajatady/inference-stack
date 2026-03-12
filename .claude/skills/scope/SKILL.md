@@ -267,20 +267,25 @@ See [infrastructure.md](infrastructure.md) "Our Simulation Setup" for full detai
 
 **RunPod cluster** (ssh $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT): 2x NVIDIA RTX A4500 (20GB VRAM each), 48 CPU cores, 251GB RAM. Exposes gRPC endpoints for infer, cancel, health, cache_state, load_model, unload_model.
 
-**Model Roster** (6 models across 5 modalities):
+**Model Roster** (8 models across 5 modalities):
 
 | Model | Type | VRAM (FP16) | Default GPU | HuggingFace ID |
 |---|---|---|---|---|
 | SmolLM2-135M-Instruct | Text gen (chat) | ~0.3GB | GPU-0 | HuggingFaceTB/SmolLM2-135M-Instruct |
 | SmolLM2-360M-Instruct | Text gen (chat) | ~0.7GB | GPU-0 | HuggingFaceTB/SmolLM2-360M-Instruct |
 | SmolLM2-1.7B-Instruct | Text gen (chat) | ~3.5GB | GPU-0 | HuggingFaceTB/SmolLM2-1.7B-Instruct |
+| Qwen3-14B | Text gen (chat, thinking) | ~29GB (TP) | TP worker | Qwen/Qwen3-14B |
 | Qwen2.5-VL-3B | Vision-language | ~7GB | GPU-0 | Qwen/Qwen2.5-VL-3B-Instruct |
 | Kokoro-82M | TTS / Audio | ~0.5GB | GPU-0 | hexgrad/Kokoro-82M |
 | SD Turbo | Image gen | ~5-6GB | GPU-1 | stabilityai/sd-turbo |
 | CogVideoX-2B | Video gen | ~6-8GB | GPU-1 | THUDM/CogVideoX-2b |
 
+**Individual mode** (2 separate workers):
 GPU-0 default load: SmolLM2-135M-Instruct + Qwen2.5-VL-3B + Kokoro-82M ≈ 8GB (headroom for KV cache + swaps)
 GPU-1 default load: SD Turbo + CogVideoX-2B ≈ 12-14GB (tight — triggers real VRAM pressure)
+
+**Tensor parallel mode** (1 TP worker spanning 2 GPUs):
+Both GPUs: Qwen3-14B (~14.5GB per GPU). Runtime mode switching between individual and TP via SSH.
 
 **Simulation scenarios enabled**:
 - Model loading/unloading: swap SmolLM2-135M-Instruct ↔ SmolLM2-360M-Instruct on GPU-0
@@ -291,7 +296,12 @@ GPU-1 default load: SD Turbo + CogVideoX-2B ≈ 12-14GB (tight — triggers real
 
 **What it simulates**: Real network latency (Mac ↔ RunPod = real API-to-cluster hop), real GPU constraints (20GB VRAM), model heterogeneity (6 models, 5 modalities), independent workers, real VRAM pressure on GPU-1.
 
-**What it doesn't simulate**: Multi-datacenter (can fake with artificial latency), tensor parallelism (models too small), scale (2 GPUs not 2000, but logic is identical), spot preemption (can simulate by killing workers).
+**What it doesn't simulate**: Multi-datacenter (can fake with artificial latency), scale (2 GPUs not 2000, but logic is identical), spot preemption (can simulate by killing workers).
+
+**What it now simulates** (added via tensor parallelism):
+- Tensor parallelism: Qwen3-14B split across 2 GPUs via `tp_plan="auto"` + `torchrun --nproc_per_node=2`
+- Runtime mode switching: gateway SSHs to GPU host to switch between individual workers and TP mode
+- Thinking/reasoning models: `<think>` tag parsing, separate thinking_content in API response
 
 ---
 
@@ -368,3 +378,12 @@ GPU-1 default load: SD Turbo + CogVideoX-2B ≈ 12-14GB (tight — triggers real
   - **S14 test result** (SmolLM2-1.7B-Instruct): 9/10 cache hits, 14.1% compute savings. Crossover at ~800 tokens. Cache load 0-33ms, save 45-263ms. At <2K tokens, savings are modest — real cost case emerges at longer contexts and with Anthropic's 0.1x cached pricing.
   - **Critical discovery**: transformers v5.3.0 on RunPod uses `DynamicCache.layers` (list of `DynamicLayer` with `.keys`/`.values`), NOT v4.x `.key_cache`/`.value_cache`. Both APIs handled in `kv_cache_store.py`.
   - **S14-S16 tests written** in `load-test.spec.ts`. S14 ran and verified. S15 (concurrent sessions) and S16 (eviction under budget) written but not yet run.
+- **2026-03-12**: Tensor Parallelism + Thinking Mode + Runtime Mode Switching. Qwen3-14B (29GB FP16) running across 2x RTX A4500 via `tp_plan="auto"` + `torchrun --nproc_per_node=2`.
+  - **TP Architecture**: Rank 0 runs gRPC server + coordinates via `TPCoordinator.broadcast_command()`. Rank 1 enters command loop via `run_tp_follower()`. NCCL handles tensor distribution automatically during `model.generate()`. DTensor splits matrix multiplications across GPUs for true parallel compute speedup (not pipeline parallelism).
+  - **Thinking mode**: Qwen3-14B produces `<think>...</think>` reasoning blocks. TextGenPipeline parses tags during streaming, yields chunks with `is_thinking=True/False`. Proto: `bool is_thinking = 3` on `TokenChunk`. NestJS: `thinking_content` field separate from `content` in response. UI: collapsible `<details>` block.
+  - **Runtime mode switching**: `WorkerRegistry.switchMode()` SSHs to GPU host, kills existing workers, starts new ones. ModelManager auto-switches: TP model requested → switch to tensor-parallel mode; non-TP model → switch back to individual mode.
+  - **KV cache TP support**: `tp_size` field on `CacheEntry` — validates TP config match on load, returns miss if changed.
+  - **Model roster**: Added Qwen3-14B (8th model). `ModelRosterEntry` extended with `tensorParallel?` and `tensorParallelSize?`.
+  - **New files**: `gpu-worker/tp_coordinator.py`. Modified: `server.py` (torchrun detection), `text_gen.py` (tp_plan="auto"), `base.py` (tp_mode), `worker.py` (TP plumbing), `kv_cache_store.py` (tp_size), `model-roster.ts`, `worker-registry.ts`, `model-manager.ts`, `router.ts`, `completions.controller.ts`, `index.html`.
+  - **Verified**: ~14.5GB VRAM per GPU, coherent high-quality text with visible thinking, KV cache hits across TP turns.
+- **2026-03-12**: Project published to GitHub at `rajatady/inference-stack`. Cleaned up all hardcoded IPs/secrets → env vars + `.env.example`. Added detailed READMEs for inference-api/ and gpu-worker/ with module-by-module documentation and "not yet implemented" sections.

@@ -64,7 +64,7 @@ Linear aging? Exponential? What's the time constant?
 
 ### Q10. How to expose cache state to clients?
 Should clients know if their request hit a cache? Response header? Billing metadata?
-**Status**: PARTIALLY RESOLVED — `session_id` is auto-generated and returned in response body for client reuse. Worker returns `CacheInfo` (cached_tokens, new_tokens, cache_size_bytes) and `cache_load_ms`/`cache_save_ms` on `UsageStats`. Not yet surfaced to HTTP response headers or billing metadata. Gateway currently forwards `session_id` but not cache hit/miss status to client.
+**Status**: PARTIALLY RESOLVED — `session_id` is auto-generated and returned in response body for client reuse. Worker returns `CacheInfo` (cached_tokens, new_tokens, cache_size_bytes) and `cache_load_ms`/`cache_save_ms` on `UsageStats`. KV cache is TP-aware (tp_size validation on restore). Not yet surfaced to HTTP response headers or billing metadata. Gateway currently forwards `session_id` but not cache hit/miss status to client.
 
 ### Q11. Idempotency key format and TTL?
 How long to remember idempotency keys? Client-provided vs server-generated?
@@ -120,6 +120,14 @@ Running prefill (compute-bound) and decode (memory-bound) on separate GPU pools.
 **Leaning**: Defer. Our models are tiny.
 **Status**: OPEN
 
+### Q22. Tensor parallelism — how to coordinate ranks?
+How does rank 0 tell rank 1+ to participate in model.generate()?
+**Status**: DECIDED — `TPCoordinator` uses `torch.distributed.broadcast_object_list()` to send commands (load/unload/generate) from rank 0 to rank 1+. Rank 1+ enters `run_tp_follower()` loop calling `recv_command()` → execute locally. NCCL handles actual tensor ops during `model.generate()` via DTensor. Only rank 0 streams results back to client. Implemented in `gpu-worker/tp_coordinator.py`.
+
+### Q23. Runtime mode switching — how to handle in-flight requests?
+When switching from individual to TP mode (or vice versa), what happens to requests currently being processed?
+**Status**: DECIDED — ModelManager.ensureModelLoaded() triggers switch before any inference starts. Switch kills all worker processes, so no in-flight requests survive. This is acceptable because: (1) switch only happens on model-type change (rare), (2) the first request for a new model type triggers the switch and waits for it to complete, (3) subsequent requests find the model already loaded. Potential improvement: drain in-flight requests before switching (not yet implemented).
+
 ---
 
 ## Changelog
@@ -129,3 +137,4 @@ Running prefill (compute-bound) and decode (memory-bound) on separate GPU pools.
 - **2026-03-11**: Resolved Q1 (three separate components: Router, SchedulerService, BatchCollector), Q2 (per-user FIFO queues + per-model batching buckets), Q7 (linear aging with configurable agingBoostPerSecond), Q8 (static batching window, adaptive deferred), Q16 (8 RPCs fully defined in proto, 5 implemented in Python worker), Q17 (static config via WorkerRegistry, env vars or defaults). All resolved through implementation and testing against real GPUs.
 - **2026-03-12**: Multi-modal implementation resolved additional design decisions: (1) GPU affinity — ModelManager sorts candidates by model roster's `defaultGpu` preference before VRAM, ensuring models land on intended GPUs. (2) CUDA_VISIBLE_DEVICES handling — worker.py resolves physical GPU ID for pynvml separately from CUDA device index. (3) CPU offloading strategy for large models — CogVideoX uses `enable_model_cpu_offload()` exclusively (no `.to(device)`), reducing peak VRAM from ~19GB to ~5GB. (4) Pipeline abstraction — Python worker uses MODEL_TYPE_REGISTRY mapping HuggingFace IDs → pipeline types, with BasePipeline ABC defining load/infer/unload/get_capabilities interface. (5) Multi-modal endpoints follow OpenAI API conventions: images return JSON with b64_json, audio returns raw WAV binary, video returns raw MP4 binary.
 - **2026-03-12**: Disaggregated KV cache implementation partially resolved Q10 (cache state exposure) — session_id returned in response body, CacheInfo + cache timing returned from worker via gRPC. Not yet surfaced to client HTTP response headers or billing metadata.
+- **2026-03-12**: Added Q22 (TP rank coordination) and Q23 (mode switching in-flight requests). Q22 resolved: TPCoordinator uses torch.distributed.broadcast_object_list() for rank communication. Q23 resolved: mode switch kills all workers (no in-flight request survival), triggered by ModelManager before first inference of new model type. Updated Q10 with TP-aware cache (tp_size validation).

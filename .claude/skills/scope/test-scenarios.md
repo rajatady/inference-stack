@@ -317,7 +317,65 @@ These are the architectural invariants the system must exhibit. Each is an integ
 
 ---
 
+## Category: Tensor Parallelism (Added 2026-03-12)
+
+### T37. Tensor parallel inference (Qwen3-14B across 2 GPUs)
+**Setup**: `torchrun --nproc_per_node=2 server.py --tp`. Load Qwen3-14B via TP worker. Send multi-turn conversation.
+**Invariant**: Both GPUs show ~14.5GB VRAM usage. Rank 0 serves gRPC, rank 1 participates in NCCL ops. Model produces coherent, high-quality text. KV cache works across turns (cache hits on turns 2+).
+**Why it's hard**: TP requires NCCL initialization, DTensor distribution, and correct rank coordination. KV cache tensors are sharded — only rank 0's shard is stored, must validate tp_size match on restore.
+**Status**: IMPLEMENTED — Verified via `torchrun --nproc_per_node=2 server.py --port 50051 --tp` on RunPod. Both GPUs at ~14.5GB. Text quality significantly better than single-GPU models. Thinking mode (`<think>` tags) renders correctly. KV cache verified with session_id.
+
+### T38. Runtime mode switching (individual ↔ tensor-parallel)
+**Setup**: Gateway running in individual mode (2 workers). Request for Qwen3-14B arrives (requires TP). Then request for SmolLM2-135M (individual mode).
+**Invariant**: First request triggers automatic switch to TP mode (SSH to GPU host, kill workers, start torchrun). After Qwen3-14B inference completes, request for SmolLM2 triggers switch back to individual mode. Workers re-register in WorkerRegistry.
+**Why it's hard**: Mode switching involves killing/starting remote processes via SSH, re-establishing gRPC connections, waiting for health checks. Must be atomic — no requests should be lost during transition.
+**Status**: IMPLEMENTED — WorkerRegistry.switchMode() SSHs to GPU host, kills existing processes, starts new ones. ModelManager.ensureModelLoaded() auto-detects TP requirement from model-roster.ts (`tensorParallel: true`) and triggers switch. Verified via curl: Qwen3-14B → TP mode → SmolLM2 → individual mode.
+
+### T39. Thinking mode streaming (Qwen3-14B)
+**Setup**: Send prompt to Qwen3-14B that triggers reasoning. Stream response via SSE.
+**Invariant**: `<think>` and `</think>` tags are parsed mid-stream. SSE events contain `is_thinking: true` for reasoning tokens and `is_thinking: false` for answer tokens. Non-streaming response has separate `thinking_content` and `content` fields. UI renders collapsible thinking block.
+**Why it's hard**: Tag parsing must handle partial tags across chunk boundaries. State machine (inside_thinking vs outside) must be maintained across streaming chunks.
+**Status**: IMPLEMENTED — TextGenPipeline parses `<think>`/`</think>` during streaming. Proto `TokenChunk.is_thinking` carries flag through gRPC. NestJS completions controller separates thinking_content from content. UI shows collapsible `<details>` block. Verified via browser UI with Qwen3-14B.
+
+---
+
+## Updated Implementation Summary
+
+| Scenario | Status | Test File |
+|---|---|---|
+| T1-T4 | NOT STARTED | — (requires KV cache-aware routing in NestJS router) |
+| T5-T6 | NOT STARTED | — (requires eviction cascading protection) |
+| T7 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts |
+| T8 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts |
+| T9 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts + test/e2e/inference-api.e2e-spec.ts |
+| T10 | IMPLEMENTED | test/integration/scheduler-fairness.spec.ts |
+| T11 | IMPLEMENTED | test/integration/batching.spec.ts |
+| T12 | PARTIALLY IMPLEMENTED | test/integration/batching.spec.ts (static batching done, continuous batching deferred) |
+| T13 | IMPLEMENTED | test/integration/batching.spec.ts |
+| T14 | NOT STARTED | — (requires OOM retry logic) |
+| T15 | NOT STARTED | — (requires KV cache manager + session tracking) |
+| T16 | IMPLEMENTED | test/integration/cancel-disconnect.spec.ts + test/e2e/inference-api.e2e-spec.ts |
+| T17 | NOT STARTED | — (requires KV cache manager + cost accounting) |
+| T18 | NOT STARTED | — (requires deduplication layer) |
+| T19 | PARTIALLY IMPLEMENTED | test/integration/tokenization.spec.ts (validation exists, not wired into admission) |
+| T20 | NOT STARTED | — (requires speculative decoding) |
+| T21 | NOT STARTED | — (requires distributed tracing) |
+| T22 | PARTIALLY IMPLEMENTED | — (basic estimate exists, accuracy improvement deferred) |
+| T23-T27 | IMPLEMENTED | test/e2e/inference-api.e2e-spec.ts + integration tests |
+| T28-T33 | IMPLEMENTED | test/load/load-test.spec.ts (S1-S6) |
+| T34 | IMPLEMENTED | test/load/load-test.spec.ts (S14) |
+| T35 | IMPLEMENTED (test written, not run) | test/load/load-test.spec.ts (S15) |
+| T36 | IMPLEMENTED (test written, not run) | test/load/load-test.spec.ts (S16) |
+| T37 | IMPLEMENTED | Verified manually via torchrun + curl |
+| T38 | IMPLEMENTED | Verified manually via curl (auto mode switching) |
+| T39 | IMPLEMENTED | Verified manually via browser UI |
+
+**Score: 21 implemented + 2 written-not-run + 3 partial + 12 not started = 38 total scenarios**
+
+---
+
 ## Changelog
 
 - **2026-03-12**: Added T28-T33 (observability + performance scenarios). All implemented via ClickHouse metrics pipeline + load test suite. Key finding: decode is 92% of GPU time, prefix sharing saves 96% of prefill but prefill is only 5% of total. Continuous batching would be the bigger win over KV cache alone.
 - **2026-03-12**: Added T34-T36 (disaggregated KV cache scenarios). T34 (recompute vs cache transfer) implemented and verified — 9/10 cache hits, 14.1% savings, crossover at ~800 tokens. T35 (concurrent sessions) and T36 (eviction under budget) tests written but not yet run against GPUs. KV cache stored in CPU DRAM on GPU worker (in-process Python memory), session routing via session_id through NestJS scheduler to gRPC cache_hint. Critical discovery: transformers v5.3.0 uses DynamicCache.layers (not key_cache/value_cache) — both APIs handled in kv_cache_store.py.
+- **2026-03-12**: Added T37-T39 (tensor parallelism scenarios). All 3 implemented and verified manually. T37: Qwen3-14B across 2 GPUs via torchrun + tp_plan="auto", ~14.5GB per GPU, with KV cache. T38: Runtime mode switching (individual ↔ tensor-parallel) via SSH, auto-triggered by ModelManager. T39: Thinking mode streaming with `<think>` tag parsing, separate thinking_content in response, collapsible UI block. Total: 21 implemented + 2 written-not-run + 3 partial + 12 not started = 38 scenarios.

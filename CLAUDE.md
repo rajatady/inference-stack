@@ -6,7 +6,7 @@ A production-grade LLM inference API built in TypeScript/NestJS. Learning exerci
 ## Architecture (TL;DR)
 - **Local machine**: NestJS API gateway, router, scheduler, KV cache manager, tests. All CPU-only logic.
 - **GPU cluster** (RunPod or similar, see .env.example): 2x RTX A4500 (20GB VRAM each). GPU workers communicate via gRPC.
-- **Model roster** (7 models, 5 modalities): SmolLM2-135M-Instruct (text), SmolLM2-360M-Instruct (text), SmolLM2-1.7B-Instruct (text), Qwen2.5-VL-3B (vision), Kokoro-82M (TTS), SD Turbo (image gen), CogVideoX-2B (video gen). Base text models removed — instruct-only.
+- **Model roster** (8 models, 5 modalities): SmolLM2-135M-Instruct (text), SmolLM2-360M-Instruct (text), SmolLM2-1.7B-Instruct (text), Qwen3-14B (text, tensor parallel), Qwen2.5-VL-3B (vision), Kokoro-82M (TTS), SD Turbo (image gen), CogVideoX-2B (video gen). Qwen3-14B requires tensor parallelism across 2 GPUs.
 - API server NEVER runs on GPU machines. Three planes: control, gateway, GPU workers.
 
 ## Source of Truth
@@ -15,7 +15,7 @@ All architecture, design decisions, test scenarios, and open questions live in `
 - `.claude/skills/scope/SKILL.md` — main overview (16 sections)
 - `.claude/skills/scope/grpc-contract.md` — protobuf schema for gateway ↔ worker
 - `.claude/skills/scope/infrastructure.md` — physical topology, deployment model
-- `.claude/skills/scope/test-scenarios.md` — 35 critical test invariants (18 implemented, 2 written-not-run, 3 partial, 12 not started)
+- `.claude/skills/scope/test-scenarios.md` — 38 critical test invariants (20 implemented, 2 written-not-run, 3 partial, 13 not started)
 - `.claude/skills/scope/open-questions.md` — unresolved decisions (21 questions)
 - `.claude/skills/scope/kv-cache.md` — KV cache routing, eviction, prefix sharing design
 
@@ -90,9 +90,10 @@ test/
     │   ├── tts.py                     # Kokoro KPipeline → WAV bytes
     │   ├── image_gen.py               # AutoPipelineForText2Image (SD Turbo) → PNG bytes
     │   └── video_gen.py               # CogVideoXPipeline (CPU offload) → MP4 bytes
-    ├── kv_cache_store.py               # CPU DRAM-backed KV cache store with LRU eviction (disaggregated)
-    ├── server.py                      # gRPC server entry point (MediaOutput + TokenChunk + CacheInfo)
-    ├── worker.py                      # GPU management (pipeline registry, model loading, state, KVCacheStore)
+    ├── kv_cache_store.py               # CPU DRAM-backed KV cache store with LRU eviction (disaggregated), TP-aware (tp_size tracking)
+    ├── tp_coordinator.py              # Tensor parallelism coordinator (rank 0 broadcasts commands to rank 1+ via torch.distributed)
+    ├── server.py                      # gRPC server entry point (MediaOutput + TokenChunk + CacheInfo + torchrun TP detection)
+    ├── worker.py                      # GPU management (pipeline registry, model loading, state, KVCacheStore, TP mode)
     └── requirements.txt
 ```
 
@@ -230,6 +231,17 @@ test/
   - **Critical discovery**: transformers v5.3.0 on RunPod uses `DynamicCache.layers` (list of `DynamicLayer` objects with `.keys`/`.values` tensor attributes), NOT v4.x `.key_cache`/`.value_cache` lists. `kv_cache_store.py` handles both APIs.
   - **Verified E2E**: Direct gRPC test on RunPod — Request 1: MISS → SAVE (1.4MB, 3.8ms). Request 2: HIT → cached_tokens=8, cache_load_ms=2.1ms.
 
+- **Tensor Parallelism + Thinking Mode (Qwen3-14B)** — Model split across 2 GPUs via `tp_plan="auto"` + torchrun, with `<think>` reasoning support:
+  - **TP Architecture**: `torchrun --nproc_per_node=2 server.py --port 50051 --tp` launches 2 ranks. Rank 0 runs gRPC server. Rank 1 enters command loop via `TPCoordinator`, participating in NCCL collective ops when rank 0 calls `model.generate()`. DTensor handles tensor distribution transparently.
+  - **`gpu-worker/tp_coordinator.py`** (NEW): Coordinates tensor parallelism across ranks. `broadcast_command()` sends load/unload/generate commands to rank 1+ via `torch.distributed.broadcast_object_list()`. `recv_command()` on rank 1+ executes commands locally (NCCL handles tensor ops during generate). Only rank 0 streams results back.
+  - **`gpu-worker/server.py`** (MODIFIED): `--tp` flag, torchrun environment detection (`RANK`, `LOCAL_RANK`, `WORLD_SIZE` env vars). Rank 0: creates GpuWorker + starts gRPC server. Rank 1+: enters `run_tp_follower()` command loop. Shutdown RPC for clean process termination.
+  - **`gpu-worker/pipelines/text_gen.py`** (MODIFIED): When `tp_mode=True`, loads model with `tp_plan="auto"` instead of `.to(device)`. No changes to `infer()` or `infer_batch()` — DTensor handles distribution transparently during `model.generate()`.
+  - **Thinking mode**: Qwen3-14B outputs `<think>...</think>` reasoning before answers. `text_gen.py` parses stream for `<think>`/`</think>` tags, yields chunks with `is_thinking=True/False`. Proto: `bool is_thinking = 3` on `TokenChunk`. NestJS: `thinking_content` field in completion response (separate from `content`). UI: collapsible `<details>` block for thinking content.
+  - **`gpu-worker/kv_cache_store.py`** (MODIFIED): `tp_size` field on `CacheEntry`. `save()` records `tp_size=world_size`. `load()` validates `entry.tp_size == current_world_size`, returns miss on mismatch (prevents using sharded cache after TP config change).
+  - **`inference-api/src/config/model-roster.ts`** (MODIFIED): Added Qwen3-14B entry with `tensorParallel: true`, `tensorParallelSize: 2`, `vramEstimateBytes: 29e9`, `defaultGpu: 'tp-worker-0'`. Extended `ModelRosterEntry` interface with `tensorParallel?` and `tensorParallelSize?` fields.
+  - **Runtime Mode Switching**: `WorkerRegistry.switchMode('individual' | 'tensor-parallel')` SSHs to GPU host, kills existing worker processes, starts new ones in requested mode. `ModelManager.ensureModelLoaded()` auto-switches mode when TP model requested (Qwen3-14B → TP mode) or non-TP model requested (SmolLM2 → individual mode).
+  - **Verified**: Qwen3-14B loaded across 2 GPUs (~14.5GB per GPU), produces coherent high-quality text with visible `<think>` reasoning. Thinking content renders in collapsible UI block. KV cache works with TP (cache hits on subsequent turns).
+
 - **Per-Request Timeout** — Infrastructure for request-level timeouts in scheduler:
   - `SchedulerConfig.requestTimeoutMs` (default 60s, 0 = no timeout)
   - `QueuedRequest.timeoutTimer` tracks per-request timer handle
@@ -313,7 +325,8 @@ test/
 |---|---|---|---|
 | POST /v1/completions | SmolLM2-135M-Instruct | Text gen (chat) | ✓ |
 | POST /v1/completions | SmolLM2-360M-Instruct | Text gen (chat) | ✓ |
-| POST /v1/completions | SmolLM2-1.7B-Instruct | Text gen (chat) | ✓ (roster only) |
+| POST /v1/completions | SmolLM2-1.7B-Instruct | Text gen (chat) | ✓ |
+| POST /v1/completions | Qwen3-14B | Text gen (chat, TP, thinking mode) | ✓ |
 | POST /v1/completions + images | Qwen2.5-VL-3B | Vision → text | ✓ |
 | POST /v1/audio/speech | Kokoro-82M | Text → audio (WAV) | ✓ |
 | POST /v1/images/generations | SD Turbo | Text → image (PNG) | ✓ |
@@ -355,13 +368,24 @@ GPUs become stateless. KV cache stored in CPU RAM/SSD/network pool, loaded to an
 ### Partially implemented
 - **Disaggregated KV cache** — CPU DRAM persistence implemented (kv_cache_store.py), session routing via session_id working end-to-end (S14 verified 9/10 cache hits). Remaining: prefix sharing (T3), cache-aware routing in NestJS router (T1-T2), eviction cascading protection (T4-T5), gateway-level cache registry
 
-### Not yet started (future phases)
+### Not yet implemented (future scope)
 - KV cache-aware routing (T1-T2) — NestJS router picks GPU with warm cache for session_id
 - Prefix sharing (T3) — compute KV once for shared system prompts, reuse across requests
+- Weighted KV cache eviction — `recompute_cost x reuse_probability` instead of pure LRU
 - Cache eviction cascading protection (T4-T5) — dampening, rate limiting
 - Continuous batching (T12) — mid-batch slot reclamation, requires Python worker batch slot table
-- Speculative decoding
-- Post-inference pipeline (safety filtering, usage tracking)
+- Speculative decoding — draft model + verifier in tandem
+- Content filtering / safety pipeline — pre-inference and post-inference checks
+- Request deduplication — identical simultaneous prompts share one inference
+- Structured output — JSON mode, constrained decoding
+- Token-level rate limiting — per-user tokens/sec (not just requests/sec)
+- API versioning — endpoint versions, model version pinning, deprecation policy
+- Idempotency keys — at-most-once delivery for non-streaming requests
+- OOM retry — retry failed inference on different GPU
+- Worker crash recovery — redistribute queued requests when a worker dies
+- Quantization-aware routing — same model at FP16 on one GPU, INT4 on another
+- Multi-image vision — only single image per request currently
+- Streaming media — audio/image/video buffered entirely before sending
 
 ### Running things
 - Unit tests: `cd inference-api && npx jest`
