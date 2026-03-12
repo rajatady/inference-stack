@@ -203,6 +203,21 @@ Defined in `proto/inference_worker.proto`. Key message types:
 - **`LoadModelRequest`**: `model_id`, `model_path`, `quantization`, `model_type`
 - **`WorkerState`**: GPU metrics, loaded models with capabilities, active/queued inferences
 
+## Not yet implemented
+
+| Feature | What's missing | Why it matters |
+|---------|---------------|---------------|
+| **Prefix tree / shared prefixes** | Common system prompts computed once per GPU, reused across requests | Every request recomputes the same system prompt. With prefix sharing, only the first request pays the cost. |
+| **Continuous batching** | In-flight batch joining — new requests start generating while earlier ones are still decoding | Current `infer_batch()` waits for all requests to finish before returning any. Continuous batching keeps the GPU saturated. |
+| **Speculative decoding** | Small draft model + large verifier in tandem | Not implemented at pipeline level. Would require a second model loaded alongside the main one. |
+| **KV cache for non-text pipelines** | Vision, TTS, image, video have no session caching | Only `TextGenPipeline` uses `KVCacheStore`. Multi-turn vision conversations recompute from scratch. |
+| **Streaming media** | Audio/image/video are buffered entirely before sending | TTS could stream audio chunks as they're generated. Image gen could stream intermediate denoising steps. |
+| **Quantization support** | INT8/INT4 model loading | `load()` accepts a `quantization` parameter but only FP16 is implemented. Would need `bitsandbytes` or GPTQ integration. |
+| **GetCacheEntries / EvictCache RPCs** | gRPC stubs exist but return empty responses | Gateway can't inspect or manage individual cache entries on the worker. |
+| **Graceful inference cancellation** | No way to abort a running `model.generate()` mid-stream | `context.is_active()` check prevents sending results after disconnect, but the GPU computation continues until completion. |
+| **Multi-image vision** | Only single image per request | `VisionLanguagePipeline` processes one image. Qwen2.5-VL supports multiple images natively. |
+| **Audio streaming (chunked TTS)** | Kokoro generates full audio before returning | Could yield audio segments as they're produced for lower time-to-first-byte. |
+
 ## Dependencies
 
 Core: `torch`, `transformers`, `grpcio`, `pynvml`

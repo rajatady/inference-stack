@@ -4,6 +4,8 @@ A production-grade LLM inference API built from scratch in TypeScript/NestJS + P
 
 **This is not a wrapper around vLLM or TGI.** Every layer is built from raw `transformers` + `grpcio` to understand what happens under the hood.
 
+![Inference Playground UI](docs/ui.png)
+
 ## What it does
 
 ```
@@ -73,7 +75,7 @@ Manages N gRPC worker connections dynamically. Supports runtime mode switching (
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/YOUR_USER/inference-stack.git
+git clone https://github.com/rajatady/inference-stack.git
 cd inference-stack
 
 # 2. Gateway (NestJS)

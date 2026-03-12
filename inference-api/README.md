@@ -166,3 +166,25 @@ npm run test:load
 | Integration | 17+1 | Real GPU gRPC calls: connection, routing, fairness, cancel, batching |
 | E2E | 18 | Full HTTP → scheduler → GPU → response, streaming, priority |
 | Load | 18 | Concurrency scaling, model thrashing, queue overflow, mixed modality, timeout |
+
+## Not yet implemented
+
+These are scoped in the architecture docs (`.claude/skills/scope/`) but not built:
+
+| Feature | What's missing | Why it matters |
+|---------|---------------|---------------|
+| **Prefix sharing** | Shared system prompt KV cache across requests on the same GPU | S3 load test showed 96% wasted prefill — 20 requests with identical 134-token system prompt each recompute from scratch |
+| **Weighted KV cache eviction** | Eviction policy using `recompute_cost × reuse_probability` instead of pure LRU | LRU evicts a 10K-token cache (expensive to recompute) over a 100-token one (cheap). Weighted eviction prevents this. |
+| **Cascade dampening** | Rate-limiting evictions to prevent chain reactions | Evicting one cache can cause a miss, which triggers recompute, which evicts another cache, etc. |
+| **Continuous batching** | New requests joining in-flight batches mid-decode | Current batching waits for all requests in a batch to finish. Continuous batching would let new arrivals join immediately, keeping the GPU fully utilized. |
+| **Speculative decoding** | Draft model generates candidate tokens, main model verifies in batch | Trades GPU compute for latency — small model drafts fast, large model verifies in parallel. |
+| **OOM retry** | Retry failed inference on a different GPU | Currently OOM during inference returns an error. Should retry on another worker with more VRAM headroom. |
+| **Worker crash recovery** | Redistribute queued requests when a worker dies | Worker crash currently marks it unhealthy but queued requests are lost. |
+| **Session migration** | Move KV cache to another GPU after crash (without thundering herd) | When a GPU with active sessions crashes, all those sessions need to restart somewhere. |
+| **Content filtering** | Pre-inference safety checks, post-inference output filtering | No safety pipeline — requests go straight to GPU. |
+| **Request deduplication** | Identical simultaneous prompts share one inference | 100 users sending the same prompt = 100 separate GPU inferences today. |
+| **Structured output** | JSON mode, constrained decoding, grammar-guided generation | No way to guarantee output format (valid JSON, function calls, etc.). |
+| **Token-level rate limiting** | Per-user tokens/sec limits (not just requests/sec) | Current backpressure is queue-depth based. A single user could monopolize GPU with long-context requests. |
+| **API versioning** | Endpoint versioning, model version pinning, deprecation policy | No versioning strategy — breaking changes would affect all clients. |
+| **Idempotency keys** | At-most-once delivery for non-streaming requests | Client retries can cause duplicate inference work. |
+| **Quantization-aware routing** | Same model at FP16 on one GPU, INT4 on another; router picks based on quality/speed tradeoff | Currently all models loaded at FP16. No mixed-precision routing. |
