@@ -33,6 +33,7 @@ class CacheEntry:
     size_bytes: int
     created_at: float
     last_accessed: float
+    tp_size: int = 1  # TP world size when cache was created — invalidate on mismatch
 
 
 class KVCacheStore:
@@ -56,7 +57,7 @@ class KVCacheStore:
 
         logger.info(f"[KVCache] Store initialized with {max_bytes / 1e9:.1f}GB DRAM budget")
 
-    def save(self, session_id: str, past_key_values, seq_len: int) -> dict:
+    def save(self, session_id: str, past_key_values, seq_len: int, tp_size: int = 1) -> dict:
         """
         Save KV cache tensors to CPU DRAM.
 
@@ -125,6 +126,7 @@ class KVCacheStore:
                 size_bytes=total_bytes,
                 created_at=now,
                 last_accessed=now,
+                tp_size=tp_size,
             )
             self._entries[session_id] = entry
             self._total_bytes += total_bytes
@@ -141,7 +143,7 @@ class KVCacheStore:
             "tokens": seq_len,
         }
 
-    def load(self, session_id: str, device: str) -> Tuple[Optional[object], dict]:
+    def load(self, session_id: str, device: str, tp_size: int = 1) -> Tuple[Optional[object], dict]:
         """
         Load KV cache from CPU DRAM to GPU device.
 
@@ -162,6 +164,14 @@ class KVCacheStore:
                 return None, {"load_ms": 0, "tokens": 0, "bytes": 0, "hit": False}
 
             entry = self._entries[session_id]
+
+            # Invalidate if TP configuration changed
+            if entry.tp_size != tp_size:
+                logger.info(f"[KVCache] MISS {session_id} (tp_size mismatch: cached={entry.tp_size}, current={tp_size})")
+                self._evict_entry(session_id)
+                self._miss_count += 1
+                return None, {"load_ms": 0, "tokens": 0, "bytes": 0, "hit": False}
+
             entry.last_accessed = time.time()
             # Move to end (most recently used)
             self._entries.move_to_end(session_id)

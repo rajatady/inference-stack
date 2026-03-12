@@ -1,8 +1,11 @@
 import { GpuWorkerService } from '../gpu-worker/gpu-worker.service';
 
+export type WorkerMode = 'individual' | 'tensor-parallel';
+
 export interface WorkerConfig {
   id: string;
   url: string;
+  mode?: WorkerMode;
 }
 
 export interface WorkerHandle {

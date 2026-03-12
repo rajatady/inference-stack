@@ -11,684 +11,953 @@
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg-void: #060810;
-      --bg-deep: #0a0d14;
-      --bg-surface: #10141c;
-      --bg-elevated: #171c28;
-      --bg-input: #1c2233;
-      --border: #232a3a;
-      --border-hover: #2e3750;
-      --border-active: #c9943a;
-      --text-primary: #e4dfd3;
-      --text-secondary: #7a7f94;
-      --text-muted: #3e4460;
-      --accent: #c9943a;
-      --accent-soft: rgba(201, 148, 58, 0.12);
-      --accent-glow: rgba(201, 148, 58, 0.35);
-      --success: #48d67a;
-      --error: #d64848;
-      --radius: 8px;
-      --radius-lg: 12px;
-      --mono: 'DM Mono', 'Menlo', monospace;
-      --sans: 'Bricolage Grotesque', system-ui, sans-serif;
+      --bg-void: #0a0a0a;
+      --bg-deep: #111111;
+      --bg-surface: #191919;
+      --bg-elevated: #222222;
+      --bg-input: #1a1a1a;
+      --bg-hover: #2a2a2a;
+      --border: #2a2a2a;
+      --border-hover: #3a3a3a;
+      --border-active: #d4a853;
+      --text-primary: #e8e4db;
+      --text-secondary: #888888;
+      --text-muted: #555555;
+      --accent: #d4a853;
+      --accent-soft: rgba(212, 168, 83, 0.1);
+      --accent-glow: rgba(212, 168, 83, 0.25);
+      --success: #4ade80;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --thinking-bg: #1a1a10;
+      --thinking-border: #3d3520;
+      --user-bg: #1e1e2e;
+      --assistant-bg: transparent;
+      --radius: 10px;
+      --radius-lg: 16px;
+      --radius-xl: 20px;
+      --mono: 'DM Mono', 'Menlo', 'Consolas', monospace;
+      --sans: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif;
+      --sidebar-w: 260px;
+      --header-h: 56px;
+      --input-area-h: auto;
     }
 
-    html { height: 100%; }
+    html, body { height: 100%; overflow: hidden; }
 
     body {
-      height: 100%;
       font-family: var(--sans);
       background: var(--bg-void);
       color: var(--text-primary);
-      overflow: hidden;
       -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
-    /* Noise texture overlay */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      opacity: 0.025;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-      background-size: 200px;
-      pointer-events: none;
-      z-index: 9999;
-    }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
 
     /* Layout */
-    .app {
-      display: grid;
-      grid-template-columns: 280px 1fr;
-      height: 100vh;
-    }
+    .app { display: flex; height: 100vh; }
 
-    /* Sidebar */
+    /* ===== SIDEBAR ===== */
     .sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
       background: var(--bg-deep);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      transition: transform 0.2s ease;
     }
 
     .sidebar-header {
-      padding: 24px 20px 20px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       border-bottom: 1px solid var(--border);
+      min-height: var(--header-h);
     }
 
     .logo {
-      font-family: var(--sans);
       font-weight: 200;
-      font-size: 22px;
+      font-size: 18px;
       letter-spacing: -0.5px;
-      color: var(--text-primary);
       display: flex;
       align-items: center;
       gap: 8px;
     }
 
     .logo-dot {
-      width: 8px;
-      height: 8px;
+      width: 7px; height: 7px;
       border-radius: 50%;
       background: var(--accent);
-      box-shadow: 0 0 12px var(--accent-glow);
-      animation: pulse-glow 3s ease-in-out infinite;
+      box-shadow: 0 0 10px var(--accent-glow);
     }
 
-    @keyframes pulse-glow {
-      0%, 100% { box-shadow: 0 0 8px var(--accent-glow); }
-      50% { box-shadow: 0 0 18px var(--accent-glow), 0 0 4px var(--accent); }
+    .new-chat-btn {
+      width: 34px; height: 34px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: all 0.15s;
     }
 
-    .sidebar-section {
-      padding: 16px 20px;
+    .new-chat-btn:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border-color: var(--border-hover);
     }
 
-    .sidebar-section + .sidebar-section {
+    .threads-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .thread-item {
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: all 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .thread-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .thread-item.active { background: var(--bg-elevated); color: var(--text-primary); }
+
+    .thread-item .thread-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
+    .thread-item .thread-delete {
+      opacity: 0;
+      width: 20px; height: 20px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .thread-item:hover .thread-delete { opacity: 1; }
+    .thread-item .thread-delete:hover { color: var(--error); background: rgba(239,68,68,0.1); }
+
+    .sidebar-footer {
+      padding: 12px 16px;
       border-top: 1px solid var(--border);
     }
 
-    .section-label {
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .stat-item { display: flex; align-items: center; gap: 4px; }
+    .stat-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+    .stat-dot.warning { background: var(--warning); }
+    .stat-dot.error { background: var(--error); }
+
+    /* ===== MAIN ===== */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      position: relative;
+    }
+
+    /* Header */
+    .main-header {
+      height: var(--header-h);
+      min-height: var(--header-h);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+      background: var(--bg-deep);
+    }
+
+    .model-selector {
+      position: relative;
+    }
+
+    .model-btn {
+      padding: 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s;
+    }
+
+    .model-btn:hover { border-color: var(--border-hover); background: var(--bg-elevated); }
+
+    .model-btn .arrow {
+      font-size: 10px;
+      color: var(--text-muted);
+      transition: transform 0.15s;
+    }
+
+    .model-btn.open .arrow { transform: rotate(180deg); }
+
+    .model-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      min-width: 320px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+      z-index: 100;
+      display: none;
+      overflow: hidden;
+    }
+
+    .model-dropdown.open { display: block; }
+
+    .model-dropdown-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .model-option {
+      padding: 10px 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: background 0.1s;
+    }
+
+    .model-option:hover { background: var(--bg-hover); }
+    .model-option.selected { background: var(--accent-soft); }
+
+    .model-option-name {
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .model-option-meta {
       font-family: var(--mono);
       font-size: 10px;
-      font-weight: 500;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
       color: var(--text-muted);
-      margin-bottom: 12px;
     }
 
-    .field {
-      margin-bottom: 14px;
-    }
-
-    .field:last-child { margin-bottom: 0; }
-
-    .field-label {
+    .model-badge {
       font-family: var(--mono);
-      font-size: 11px;
-      font-weight: 400;
-      color: var(--text-secondary);
-      margin-bottom: 6px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .field-value {
-      font-family: var(--mono);
-      font-size: 11px;
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--accent-soft);
       color: var(--accent);
       font-weight: 500;
     }
 
-    input[type="text"],
-    input[type="number"],
-    select,
-    textarea {
-      width: 100%;
-      background: var(--bg-input);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 8px 12px;
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--text-primary);
-      outline: none;
-      transition: border-color 0.2s;
-    }
+    .header-spacer { flex: 1; }
 
-    input:focus, select:focus, textarea:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 2px var(--accent-soft);
-    }
-
-    select {
-      cursor: pointer;
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%237a7f94' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 12px center;
-      padding-right: 32px;
-    }
-
-    /* Range slider */
-    input[type="range"] {
-      -webkit-appearance: none;
-      width: 100%;
-      height: 4px;
-      background: var(--bg-input);
-      border-radius: 2px;
-      outline: none;
-      border: none;
-      padding: 0;
-    }
-
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: var(--accent);
-      cursor: pointer;
-      box-shadow: 0 0 8px var(--accent-glow);
-      transition: transform 0.15s;
-    }
-
-    input[type="range"]::-webkit-slider-thumb:hover {
-      transform: scale(1.2);
-    }
-
-    /* Toggle */
-    .toggle-row {
+    .header-stats {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    .toggle {
-      width: 36px;
-      height: 20px;
-      border-radius: 10px;
-      background: var(--bg-input);
-      border: 1px solid var(--border);
-      position: relative;
-      transition: all 0.25s;
-      cursor: pointer;
-    }
-
-    .toggle.active {
-      background: var(--accent-soft);
-      border-color: var(--accent);
-    }
-
-    .toggle::after {
-      content: '';
-      position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--text-secondary);
-      transition: all 0.25s;
-    }
-
-    .toggle.active::after {
-      left: 19px;
-      background: var(--accent);
-      box-shadow: 0 0 6px var(--accent-glow);
-    }
-
-    /* History */
-    .history-list {
-      flex: 1;
-      overflow-y: auto;
-      padding: 0 20px 16px;
-    }
-
-    .history-list::-webkit-scrollbar { width: 4px; }
-    .history-list::-webkit-scrollbar-track { background: transparent; }
-    .history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-    .history-item {
-      padding: 10px 12px;
-      border-radius: var(--radius);
-      cursor: pointer;
-      border: 1px solid transparent;
-      transition: all 0.15s;
-      margin-bottom: 4px;
-    }
-
-    .history-item:hover {
-      background: var(--bg-elevated);
-      border-color: var(--border);
-    }
-
-    .history-item.active {
-      background: var(--accent-soft);
-      border-color: var(--border-active);
-    }
-
-    .history-prompt {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-bottom: 4px;
-    }
-
-    .history-meta {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--text-muted);
-      display: flex;
-      gap: 8px;
-    }
-
-    /* Main content */
-    .main {
-      display: flex;
-      flex-direction: column;
-      background: var(--bg-void);
-      position: relative;
-      overflow: hidden;
-    }
-
-    /* Status bar */
-    .status-bar {
-      height: 40px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-deep);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 20px;
-      flex-shrink: 0;
-    }
-
-    .status-left {
-      display: flex;
-      align-items: center;
       gap: 16px;
-    }
-
-    .status-indicator {
-      display: flex;
-      align-items: center;
-      gap: 6px;
       font-family: var(--mono);
       font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .header-stat {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .settings-toggle {
+      width: 34px; height: 34px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: transparent;
       color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      transition: all 0.15s;
     }
 
-    .status-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--text-muted);
+    .settings-toggle:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .settings-toggle.active { border-color: var(--accent); color: var(--accent); }
+
+    /* ===== CHAT AREA ===== */
+    .chat-container {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      position: relative;
     }
 
-    .status-dot.connected { background: var(--success); box-shadow: 0 0 6px rgba(72, 214, 122, 0.4); }
-    .status-dot.error { background: var(--error); }
-    .status-dot.streaming { background: var(--accent); animation: pulse-glow 1s ease-in-out infinite; }
-
-    .status-right {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--text-muted);
-    }
-
-    /* Output area */
-    .output-area {
+    .chat-messages {
       flex: 1;
       overflow-y: auto;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
+      padding: 24px 0;
+      scroll-behavior: smooth;
     }
 
-    .output-area::-webkit-scrollbar { width: 6px; }
-    .output-area::-webkit-scrollbar-track { background: transparent; }
-    .output-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .messages-inner {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
 
     .empty-state {
-      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      height: 100%;
+      text-align: center;
+      color: var(--text-muted);
       gap: 12px;
-      opacity: 0.4;
+      padding: 40px;
     }
 
-    .empty-icon {
-      font-size: 48px;
-      line-height: 1;
-      color: var(--text-muted);
+    .empty-state-icon {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: var(--bg-elevated);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 8px;
     }
 
-    .empty-text {
-      font-family: var(--sans);
-      font-size: 15px;
-      font-weight: 200;
-      color: var(--text-muted);
-    }
-
-    .empty-hint {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    /* Completion card */
-    .completion-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-      animation: card-in 0.3s ease-out;
-    }
-
-    @keyframes card-in {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .completion-card.streaming {
-      border-color: rgba(201, 148, 58, 0.25);
-      box-shadow: 0 0 24px rgba(201, 148, 58, 0.06);
-    }
-
-    .card-prompt {
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-deep);
-    }
-
-    .card-prompt-label {
-      font-family: var(--mono);
-      font-size: 10px;
-      font-weight: 500;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-    }
-
-    .card-prompt-text {
-      font-family: var(--mono);
-      font-size: 12px;
+    .empty-state h2 {
+      font-weight: 400;
+      font-size: 20px;
       color: var(--text-secondary);
-      white-space: pre-wrap;
-      word-break: break-word;
+    }
+
+    .empty-state p {
+      font-size: 13px;
+      max-width: 400px;
       line-height: 1.6;
     }
 
-    .card-response {
-      padding: 20px;
-      min-height: 48px;
-      position: relative;
+    /* Message */
+    .message {
+      padding: 16px 0;
+      animation: fadeIn 0.2s ease;
     }
 
-    .card-response-text {
-      font-family: var(--mono);
-      font-size: 13px;
-      color: var(--text-primary);
-      white-space: pre-wrap;
-      word-break: break-word;
-      line-height: 1.7;
-      letter-spacing: 0.2px;
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    .card-response-text .cursor {
-      display: inline-block;
-      width: 2px;
-      height: 15px;
-      background: var(--accent);
-      box-shadow: 0 0 8px var(--accent-glow);
-      animation: blink-cursor 0.8s step-end infinite;
-      vertical-align: text-bottom;
-      margin-left: 1px;
-    }
-
-    @keyframes blink-cursor {
-      50% { opacity: 0; }
-    }
-
-    .card-loading {
+    .message-header {
       display: flex;
       align-items: center;
       gap: 8px;
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--text-muted);
+      margin-bottom: 8px;
     }
 
-    .loading-dots::after {
-      content: '';
-      animation: dots 1.4s steps(4, end) infinite;
-    }
-
-    @keyframes dots {
-      0% { content: ''; }
-      25% { content: '.'; }
-      50% { content: '..'; }
-      75% { content: '...'; }
-    }
-
-    .card-error {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--error);
-      padding: 4px 0;
-    }
-
-    .card-stats {
-      padding: 12px 20px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-      animation: stats-in 0.3s ease-out;
-    }
-
-    @keyframes stats-in {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    .stat {
+    .message-avatar {
+      width: 26px; height: 26px;
+      border-radius: 50%;
       display: flex;
       align-items: center;
-      gap: 6px;
-    }
-
-    .stat-label {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--text-muted);
-      letter-spacing: 0.5px;
-    }
-
-    .stat-value {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-secondary);
-      font-weight: 500;
-    }
-
-    .stat-value.accent { color: var(--accent); }
-
-    /* Input area */
-    .input-area {
-      border-top: 1px solid var(--border);
-      background: var(--bg-deep);
-      padding: 16px 20px;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
       flex-shrink: 0;
     }
 
-    .input-row {
-      display: flex;
-      gap: 12px;
-      align-items: flex-end;
+    .message-avatar.user {
+      background: var(--accent-soft);
+      color: var(--accent);
     }
 
-    .input-wrapper {
-      flex: 1;
-      position: relative;
+    .message-avatar.assistant {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
     }
 
-    .input-wrapper textarea {
-      width: 100%;
-      resize: none;
-      background: var(--bg-input);
+    .message-role {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .message-model {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .message-body {
+      padding-left: 34px;
+      font-size: 14.5px;
+      line-height: 1.7;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    .message-body p { margin-bottom: 12px; }
+    .message-body p:last-child { margin-bottom: 0; }
+
+    .message-body pre {
+      background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 12px 16px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      margin: 12px 0;
       font-family: var(--mono);
-      font-size: 13px;
-      color: var(--text-primary);
+      font-size: 12.5px;
       line-height: 1.5;
-      outline: none;
-      transition: border-color 0.2s;
-      min-height: 48px;
-      max-height: 160px;
     }
 
-    .input-wrapper textarea:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 2px var(--accent-soft);
-    }
-
-    .input-wrapper textarea::placeholder {
-      color: var(--text-muted);
-      font-style: italic;
-    }
-
-    .send-btn {
-      height: 48px;
-      padding: 0 24px;
-      background: var(--accent);
-      color: var(--bg-void);
-      border: none;
-      border-radius: var(--radius);
+    .message-body code {
       font-family: var(--mono);
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: 0.5px;
+      font-size: 12.5px;
+      background: var(--bg-surface);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .message-body pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .message-body ul, .message-body ol {
+      margin: 8px 0;
+      padding-left: 24px;
+    }
+
+    .message-body li { margin: 4px 0; }
+
+    .message-body strong { font-weight: 600; }
+    .message-body em { font-style: italic; }
+
+    /* Thinking block */
+    .thinking-block {
+      margin: 8px 0 12px;
+      border: 1px solid var(--thinking-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--thinking-bg);
+    }
+
+    .thinking-header {
+      padding: 8px 14px;
       cursor: pointer;
-      transition: all 0.2s;
       display: flex;
       align-items: center;
       gap: 8px;
-      white-space: nowrap;
-    }
-
-    .send-btn:hover:not(:disabled) {
-      background: #d9a245;
-      box-shadow: 0 0 16px var(--accent-glow);
-    }
-
-    .send-btn:active:not(:disabled) {
-      transform: scale(0.97);
-    }
-
-    .send-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    .send-btn .arrow {
-      font-size: 14px;
-      transition: transform 0.2s;
-    }
-
-    .send-btn:hover:not(:disabled) .arrow {
-      transform: translateX(2px);
-    }
-
-    .cancel-btn {
-      height: 48px;
-      padding: 0 20px;
-      background: transparent;
-      color: var(--error);
-      border: 1px solid var(--error);
-      border-radius: var(--radius);
-      font-family: var(--mono);
       font-size: 12px;
       font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
+      color: var(--accent);
+      user-select: none;
+      transition: background 0.1s;
     }
 
-    .cancel-btn:hover {
-      background: rgba(214, 72, 72, 0.1);
+    .thinking-header:hover { background: rgba(212,168,83,0.05); }
+
+    .thinking-header .chevron {
+      font-size: 10px;
+      transition: transform 0.15s;
     }
 
-    .input-hint {
+    .thinking-header.open .chevron { transform: rotate(90deg); }
+
+    .thinking-header .label { font-family: var(--mono); }
+
+    .thinking-header .duration {
       font-family: var(--mono);
       font-size: 10px;
       color: var(--text-muted);
+      margin-left: auto;
+    }
+
+    .thinking-content {
+      display: none;
+      padding: 10px 14px 14px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--thinking-border);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .thinking-content.open { display: block; }
+
+    /* Streaming cursor */
+    .streaming-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 16px;
+      background: var(--accent);
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink 0.8s infinite;
+    }
+
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    /* Message footer */
+    .message-footer {
+      padding-left: 34px;
       margin-top: 8px;
       display: flex;
       align-items: center;
-      gap: 16px;
-    }
-
-    .kbd {
-      background: var(--bg-input);
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 1px 5px;
-      font-size: 10px;
-    }
-
-    /* Scrollbar for sidebar sections */
-    .sidebar-scroll {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .sidebar-scroll::-webkit-scrollbar { width: 4px; }
-    .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
-    .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-    /* Subtle grid background for main area */
-    .output-area::before {
-      content: '';
-      position: fixed;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      left: 280px;
-      background-image:
-        linear-gradient(var(--border) 1px, transparent 1px),
-        linear-gradient(90deg, var(--border) 1px, transparent 1px);
-      background-size: 60px 60px;
-      opacity: 0.08;
-      pointer-events: none;
-    }
-
-    /* Model badge in cards */
-    .model-badge {
-      display: inline-block;
+      gap: 12px;
       font-family: var(--mono);
       font-size: 10px;
-      color: var(--accent);
-      background: var(--accent-soft);
-      padding: 2px 8px;
+      color: var(--text-muted);
+    }
+
+    .message-footer .copy-btn {
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 6px;
       border-radius: 4px;
-      letter-spacing: 0.3px;
+      transition: all 0.1s;
+    }
+
+    .message-footer .copy-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+
+    /* Media output */
+    .media-output {
+      margin: 12px 0;
+      border-radius: var(--radius);
+      overflow: hidden;
+      max-width: 512px;
+    }
+
+    .media-output img {
+      width: 100%;
+      display: block;
+      border-radius: var(--radius);
+    }
+
+    .media-output audio { width: 100%; }
+
+    .media-output video {
+      width: 100%;
+      display: block;
+      border-radius: var(--radius);
+    }
+
+    /* Settings Panel */
+    .settings-panel {
+      width: 300px;
+      min-width: 300px;
+      background: var(--bg-deep);
+      border-left: 1px solid var(--border);
+      display: none;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .settings-panel.open { display: flex; }
+
+    .settings-header {
+      padding: 16px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      min-height: var(--header-h);
+      display: flex;
+      align-items: center;
+    }
+
+    .settings-body { padding: 16px 20px; }
+
+    .setting-group {
+      margin-bottom: 20px;
+    }
+
+    .setting-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .setting-label .value {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .setting-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--sans);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .setting-input:focus { border-color: var(--accent); }
+
+    .setting-slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+    }
+
+    .setting-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+
+    .setting-select {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--sans);
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .setting-select option { background: var(--bg-elevated); }
+
+    .setting-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toggle-switch {
+      width: 40px; height: 22px;
+      background: var(--border);
+      border-radius: 11px;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.2s;
+    }
+
+    .toggle-switch.on { background: var(--accent); }
+
+    .toggle-switch::after {
+      content: '';
+      width: 18px; height: 18px;
+      background: white;
+      border-radius: 50%;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s;
+    }
+
+    .toggle-switch.on::after { transform: translateX(18px); }
+
+    .setting-textarea {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--sans);
+      font-size: 13px;
+      outline: none;
+      resize: vertical;
+      min-height: 80px;
+      line-height: 1.5;
+      transition: border-color 0.15s;
+    }
+
+    .setting-textarea:focus { border-color: var(--accent); }
+
+    /* ===== INPUT AREA ===== */
+    .input-area {
+      padding: 12px 24px 20px;
+      background: var(--bg-void);
+    }
+
+    .input-wrapper {
+      max-width: 780px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .input-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 12px 54px 12px 18px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .input-box:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .input-box textarea {
+      width: 100%;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-family: var(--sans);
+      font-size: 14.5px;
+      line-height: 1.5;
+      outline: none;
+      resize: none;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .input-box textarea::placeholder { color: var(--text-muted); }
+
+    /* Image upload strip */
+    .input-images {
+      display: flex;
+      gap: 8px;
+      padding: 8px 0 4px;
+      flex-wrap: wrap;
+    }
+
+    .input-images:empty { display: none; }
+
+    .input-image-thumb {
+      width: 56px; height: 56px;
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid var(--border);
+    }
+
+    .input-image-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+    .input-image-thumb .remove {
+      position: absolute;
+      top: 2px; right: 2px;
+      width: 16px; height: 16px;
+      background: rgba(0,0,0,0.7);
+      border: none;
+      border-radius: 50%;
+      color: white;
+      font-size: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .input-actions {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      padding-top: 4px;
+    }
+
+    .input-actions-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding-top: 4px;
+    }
+
+    .input-action-btn {
+      width: 28px; height: 28px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.1s;
+    }
+
+    .input-action-btn:hover { color: var(--text-secondary); background: var(--bg-hover); }
+
+    /* Elapsed timer */
+    .elapsed-timer {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      padding-left: 34px;
+      margin-top: 4px;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .send-btn {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      width: 36px; height: 36px;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      color: var(--bg-void);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      transition: all 0.15s;
+    }
+
+    .send-btn:hover { background: #e0b85e; transform: scale(1.05); }
+    .send-btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+
+    .stop-btn {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      width: 36px; height: 36px;
+      border: none;
+      border-radius: 50%;
+      background: var(--error);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 0.15s;
+      animation: fadeIn 0.15s ease;
+    }
+
+    .stop-btn:hover { background: #dc2626; }
+
+    .input-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .session-id {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.5;
+    }
+
+    /* Loading dots */
+    .loading-dots { display: inline-flex; gap: 4px; padding: 4px 0; }
+    .loading-dots span {
+      width: 6px; height: 6px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      animation: loadDot 1.2s infinite;
+    }
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes loadDot {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Error message */
+    .error-text { color: var(--error); }
+
+    /* Hidden file input */
+    #image-upload { display: none; }
+
+    /* TPS indicator */
+    .tps-live {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .messages-inner { padding: 0 16px; }
+      .input-area { padding: 8px 16px 16px; }
+      .settings-panel {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 50;
+        box-shadow: -8px 0 24px rgba(0,0,0,0.5);
+      }
     }
   </style>
 </head>
@@ -701,700 +970,1109 @@
           <span class="logo-dot"></span>
           inference
         </div>
+        <button class="new-chat-btn" onclick="createThread()" title="New chat">+</button>
       </div>
-
-      <div class="sidebar-scroll">
-        <div class="sidebar-section">
-          <div class="section-label">Configuration</div>
-
-          <div class="field">
-            <div class="field-label">Model</div>
-            <select id="model-select">
-              <optgroup label="Text Generation (Instruct)">
-                <option value="HuggingFaceTB/SmolLM2-135M-Instruct">SmolLM2-135M-Instruct</option>
-                <option value="HuggingFaceTB/SmolLM2-360M-Instruct">SmolLM2-360M-Instruct</option>
-                <option value="HuggingFaceTB/SmolLM2-1.7B-Instruct">SmolLM2-1.7B-Instruct</option>
-              </optgroup>
-              <optgroup label="Vision-Language">
-                <option value="Qwen/Qwen2.5-VL-3B-Instruct">Qwen2.5-VL-3B</option>
-              </optgroup>
-              <optgroup label="Text-to-Speech">
-                <option value="hexgrad/Kokoro-82M">Kokoro-82M (TTS)</option>
-              </optgroup>
-              <optgroup label="Image Generation">
-                <option value="stabilityai/sd-turbo">SD Turbo</option>
-              </optgroup>
-              <optgroup label="Video Generation">
-                <option value="THUDM/CogVideoX-2b">CogVideoX-2B</option>
-              </optgroup>
-            </select>
-          </div>
-
-          <div class="field">
-            <div class="field-label">
-              Temperature
-              <span class="field-value" id="temp-display">1.0</span>
-            </div>
-            <input type="range" id="temperature" min="0" max="2" step="0.1" value="1.0">
-          </div>
-
-          <div class="field">
-            <div class="field-label">
-              Max tokens
-              <span class="field-value" id="tokens-display">50</span>
-            </div>
-            <input type="range" id="max-tokens" min="1" max="512" step="1" value="50">
-          </div>
-
-          <div class="field">
-            <div class="field-label">
-              Top P
-              <span class="field-value" id="topp-display">1.0</span>
-            </div>
-            <input type="range" id="top-p" min="0" max="1" step="0.05" value="1.0">
-          </div>
-
-          <div class="field">
-            <div class="field-label">Priority</div>
-            <select id="priority-select">
-              <option value="normal" selected>normal</option>
-              <option value="high">high</option>
-              <option value="low">low</option>
-            </select>
-          </div>
-
-          <div class="field">
-            <div class="field-label">User ID</div>
-            <input type="text" id="user-id" value="playground-user" placeholder="playground-user">
-          </div>
-
-          <div class="field">
-            <div class="toggle-row" id="stream-toggle">
-              <span class="field-label" style="margin-bottom:0">Stream</span>
-              <div class="toggle active" id="stream-switch"></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="sidebar-section" style="flex:1; display:flex; flex-direction:column; padding-bottom:0;">
-          <div class="section-label">Recent</div>
-          <div class="history-list" id="history-list">
-            <!-- Populated by JS -->
-          </div>
+      <div class="threads-list" id="threads-list"></div>
+      <div class="sidebar-footer">
+        <div class="stats-bar" id="sidebar-stats">
+          <div class="stat-item"><span class="stat-dot" id="conn-dot"></span> <span id="conn-label">connecting</span></div>
         </div>
       </div>
     </aside>
 
     <!-- Main -->
-    <main class="main">
-      <div class="status-bar">
-        <div class="status-left">
-          <div class="status-indicator">
-            <div class="status-dot" id="status-dot"></div>
-            <span id="status-text">checking...</span>
-          </div>
-        </div>
-        <div class="status-right">
-          <span id="queue-stats" style="margin-right:12px; color:var(--text-secondary)"></span>
-          <span id="status-right"></span>
-        </div>
-      </div>
-
-      <div class="output-area" id="output-area">
-        <div class="empty-state" id="empty-state">
-          <div class="empty-icon">&gt;_</div>
-          <div class="empty-text">No completions yet</div>
-          <div class="empty-hint">type a prompt below to begin</div>
-        </div>
-      </div>
-
-      <div class="input-area">
-        <div id="system-prompt-row" style="margin-bottom:10px;">
-          <div style="font-family:var(--mono); font-size:10px; color:var(--text-muted); margin-bottom:4px; letter-spacing:0.5px; text-transform:uppercase;">System Prompt</div>
-          <textarea
-            id="system-prompt"
-            rows="2"
-            placeholder="You are a helpful assistant."
-            style="width:100%; resize:none; background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; font-family:var(--mono); font-size:12px; color:var(--text-primary); outline:none; min-height:36px; max-height:80px;"
-          ></textarea>
-        </div>
-        <div class="input-row">
-          <div class="input-wrapper">
-            <textarea
-              id="prompt-input"
-              rows="2"
-              placeholder="Enter your message..."
-            ></textarea>
-          </div>
-          <button class="send-btn" id="send-btn">
-            Send <span class="arrow">&rarr;</span>
+    <div class="main">
+      <div class="main-header">
+        <div class="model-selector">
+          <button class="model-btn" id="model-btn" onclick="toggleModelDropdown()">
+            <span id="model-btn-label">SmolLM2-135M</span>
+            <span class="arrow">&#9662;</span>
           </button>
+          <div class="model-dropdown" id="model-dropdown"></div>
         </div>
-        <div class="input-hint">
-          <span><span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> to send</span>
-          <span id="char-count"></span>
+
+        <div class="header-spacer"></div>
+
+        <div class="header-stats" id="header-stats">
+          <div class="header-stat">Q: <span id="stat-queue">0</span></div>
+          <div class="header-stat">Active: <span id="stat-active">0</span></div>
+          <div class="header-stat">Tokens: <span id="stat-tokens">0</span></div>
+        </div>
+
+        <button class="settings-toggle" id="settings-toggle" onclick="toggleSettings()" title="Settings">
+          &#9881;
+        </button>
+      </div>
+
+      <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+          <div class="messages-inner" id="messages-inner">
+            <div class="empty-state" id="empty-state">
+              <div class="empty-state-icon">&#9672;</div>
+              <h2>How can I help?</h2>
+              <p>Send a message to start a conversation. Select a model above and adjust settings on the right.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings panel -->
+        <div class="settings-panel" id="settings-panel">
+          <div class="settings-header">Settings</div>
+          <div class="settings-body">
+            <div class="setting-group">
+              <div class="setting-label">System Prompt</div>
+              <textarea class="setting-textarea" id="set-system" placeholder="You are a helpful assistant.">You are a helpful assistant.</textarea>
+            </div>
+            <div class="setting-group">
+              <div class="setting-label">Temperature <span class="value" id="temp-val">1.0</span></div>
+              <input type="range" class="setting-slider" id="set-temp" min="0" max="2" step="0.1" value="1.0"
+                     oninput="document.getElementById('temp-val').textContent=this.value">
+            </div>
+            <div class="setting-group">
+              <div class="setting-label">Max Tokens <span class="value" id="maxtok-val">256</span></div>
+              <input type="range" class="setting-slider" id="set-max-tokens" min="16" max="4096" step="16" value="256"
+                     oninput="document.getElementById('maxtok-val').textContent=this.value">
+            </div>
+            <div class="setting-group">
+              <div class="setting-label">Top P <span class="value" id="topp-val">1.0</span></div>
+              <input type="range" class="setting-slider" id="set-top-p" min="0" max="1" step="0.05" value="1.0"
+                     oninput="document.getElementById('topp-val').textContent=this.value">
+            </div>
+            <div class="setting-group">
+              <div class="setting-label">Priority</div>
+              <select class="setting-select" id="set-priority">
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div class="setting-group">
+              <div class="setting-label">User ID</div>
+              <input type="text" class="setting-input" id="set-user" value="playground-user" placeholder="user-id">
+            </div>
+            <div class="setting-group">
+              <div class="setting-toggle">
+                <span class="setting-label" style="margin:0">Streaming</span>
+                <div class="toggle-switch on" id="set-stream" onclick="this.classList.toggle('on')"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </main>
+
+      <!-- Input area -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <div class="input-box" id="input-box">
+            <div class="input-images" id="input-images"></div>
+            <textarea id="message-input" rows="1" placeholder="Send a message..."
+                      onkeydown="handleInputKey(event)" oninput="autoResize(this)"></textarea>
+            <div class="input-actions-row">
+              <button class="input-action-btn" onclick="document.getElementById('image-upload').click()" title="Upload image (for vision models)">&#128247;</button>
+            </div>
+          </div>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()" title="Send">&#9654;</button>
+          <input type="file" id="image-upload" accept="image/*" multiple onchange="handleImageUpload(event)">
+        </div>
+        <div class="input-footer">
+          <span class="session-id" id="session-info"></span>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <script>
-    // Model type mapping
-    const MODEL_TYPES = {
-      'HuggingFaceTB/SmolLM2-135M-Instruct': 'text_gen',
-      'HuggingFaceTB/SmolLM2-360M-Instruct': 'text_gen',
-      'HuggingFaceTB/SmolLM2-1.7B-Instruct': 'text_gen',
-      'Qwen/Qwen2.5-VL-3B-Instruct': 'vision_language',
-      'hexgrad/Kokoro-82M': 'tts',
-      'stabilityai/sd-turbo': 'image_gen',
-      'THUDM/CogVideoX-2b': 'video_gen',
-    };
+<script>
+// ===== STATE =====
+const MODELS = [
+  { id: 'HuggingFaceTB/SmolLM2-135M-Instruct', short: 'SmolLM2-135M', type: 'text_gen', vram: '0.3GB', tp: false },
+  { id: 'HuggingFaceTB/SmolLM2-360M-Instruct', short: 'SmolLM2-360M', type: 'text_gen', vram: '0.7GB', tp: false },
+  { id: 'HuggingFaceTB/SmolLM2-1.7B-Instruct', short: 'SmolLM2-1.7B', type: 'text_gen', vram: '3.5GB', tp: false },
+  { id: 'Qwen/Qwen2.5-VL-3B-Instruct', short: 'Qwen2.5-VL-3B', type: 'vision_language', vram: '7GB', tp: false },
+  { id: 'hexgrad/Kokoro-82M', short: 'Kokoro-82M', type: 'tts', vram: '0.5GB', tp: false },
+  { id: 'stabilityai/sd-turbo', short: 'SD Turbo', type: 'image_gen', vram: '5.5GB', tp: false },
+  { id: 'THUDM/CogVideoX-2b', short: 'CogVideoX-2B', type: 'video_gen', vram: '7GB', tp: false },
+  { id: 'Qwen/Qwen3-14B', short: 'Qwen3-14B', type: 'text_gen', vram: '29GB', tp: true },
+];
 
-    function getModelType(modelId) {
-      return MODEL_TYPES[modelId] || 'text_gen';
+const STORAGE_KEY = 'inference_threads';
+let threads = [];       // Array of { id, title, model, messages: [{role, content, thinking, meta}], sessionId, createdAt }
+let activeThreadId = null;
+let isGenerating = false;
+let currentAbortController = null;
+let pendingImages = [];  // base64 strings
+let statsInterval = null;
+let elapsedInterval = null;
+let generationStartTime = null;
+
+// ===== INIT =====
+function init() {
+  loadThreads();
+  renderModelDropdown();
+  renderThreadsList();
+
+  if (threads.length === 0) {
+    createThread(true);
+  } else {
+    switchThread(threads[0].id);
+  }
+
+  startStatsPolling();
+
+  // Close dropdowns on click outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.model-selector')) {
+      document.getElementById('model-dropdown').classList.remove('open');
+      document.getElementById('model-btn').classList.remove('open');
     }
+  });
+}
 
-    function isTextModel(modelId) {
-      const t = getModelType(modelId);
-      return t === 'text_gen' || t === 'vision_language';
+// ===== THREADS =====
+function loadThreads() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    threads = raw ? JSON.parse(raw) : [];
+  } catch { threads = []; }
+}
+
+function saveThreads() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(threads));
+  } catch(e) {
+    console.warn('Failed to save threads:', e);
+  }
+}
+
+function createThread(silent = false) {
+  const id = 'thread-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const thread = {
+    id,
+    title: 'New chat',
+    model: MODELS[0].id,
+    messages: [],
+    sessionId: crypto.randomUUID(),
+    createdAt: Date.now(),
+  };
+  threads.unshift(thread);
+  saveThreads();
+  renderThreadsList();
+  switchThread(id);
+}
+
+function deleteThread(id, e) {
+  e?.stopPropagation();
+  threads = threads.filter(t => t.id !== id);
+  saveThreads();
+  renderThreadsList();
+  if (activeThreadId === id) {
+    if (threads.length > 0) {
+      switchThread(threads[0].id);
+    } else {
+      createThread(true);
     }
+  }
+}
 
-    // State
-    const state = {
-      streaming: false,
-      streamEnabled: true,
-      currentController: null,
-      completions: [],
-      mediaHistory: [], // client-side history for media gen (images, audio, video)
-    };
+function switchThread(id) {
+  activeThreadId = id;
+  renderThreadsList();
+  renderMessages();
 
-    // DOM refs
-    const $ = (sel) => document.querySelector(sel);
-    const modelSelect = $('#model-select');
-    const tempSlider = $('#temperature');
-    const tempDisplay = $('#temp-display');
-    const tokensSlider = $('#max-tokens');
-    const tokensDisplay = $('#tokens-display');
-    const topPSlider = $('#top-p');
-    const topPDisplay = $('#topp-display');
-    const prioritySelect = $('#priority-select');
-    const userIdInput = $('#user-id');
-    const streamSwitch = $('#stream-switch');
-    const promptInput = $('#prompt-input');
-    const sendBtn = $('#send-btn');
-    const outputArea = $('#output-area');
-    const emptyState = $('#empty-state');
-    const historyList = $('#history-list');
-    const statusDot = $('#status-dot');
-    const statusText = $('#status-text');
-    const statusRight = $('#status-right');
-    const queueStats = $('#queue-stats');
-    const charCount = $('#char-count');
+  const thread = getThread();
+  if (thread) {
+    selectModel(thread.model, true);
+    document.getElementById('session-info').textContent = 'session: ' + thread.sessionId.slice(0, 8);
+  }
+}
 
-    // Slider updates
-    tempSlider.addEventListener('input', () => {
-      tempDisplay.textContent = parseFloat(tempSlider.value).toFixed(1);
-    });
-    tokensSlider.addEventListener('input', () => {
-      tokensDisplay.textContent = tokensSlider.value;
-    });
-    topPSlider.addEventListener('input', () => {
-      topPDisplay.textContent = parseFloat(topPSlider.value).toFixed(2);
-    });
+function getThread() {
+  return threads.find(t => t.id === activeThreadId);
+}
 
-    // Stream toggle
-    $('#stream-toggle').addEventListener('click', () => {
-      state.streamEnabled = !state.streamEnabled;
-      streamSwitch.classList.toggle('active', state.streamEnabled);
-    });
+function generateTitle(content) {
+  const clean = content.replace(/\n/g, ' ').trim();
+  if (clean.length <= 40) return clean;
+  return clean.slice(0, 37) + '...';
+}
 
-    // Auto-resize textarea
-    promptInput.addEventListener('input', () => {
-      promptInput.style.height = 'auto';
-      promptInput.style.height = Math.min(promptInput.scrollHeight, 160) + 'px';
-      charCount.textContent = promptInput.value.length > 0
-        ? `${promptInput.value.length} chars`
-        : '';
-    });
+function renderThreadsList() {
+  const el = document.getElementById('threads-list');
+  el.innerHTML = threads.map(t => `
+    <div class="thread-item ${t.id === activeThreadId ? 'active' : ''}" onclick="switchThread('${t.id}')">
+      <span class="thread-title">${escapeHtml(t.title)}</span>
+      <button class="thread-delete" onclick="deleteThread('${t.id}', event)" title="Delete">&times;</button>
+    </div>
+  `).join('');
+}
 
-    // Keyboard shortcut
-    promptInput.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        handleSend();
-      }
-    });
+// ===== MODELS =====
+function renderModelDropdown() {
+  const grouped = {};
+  MODELS.forEach(m => {
+    const g = m.type === 'text_gen' ? 'Text Generation' :
+              m.type === 'vision_language' ? 'Vision' :
+              m.type === 'tts' ? 'Audio' :
+              m.type === 'image_gen' ? 'Image' : 'Video';
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(m);
+  });
 
-    sendBtn.addEventListener('click', handleSend);
-
-    // Create a completion card
-    function createCompletionCard(prompt, model) {
-      if (emptyState) emptyState.remove();
-
-      const card = document.createElement('div');
-      card.className = 'completion-card streaming';
-      card.innerHTML = `
-        <div class="card-prompt">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <div class="card-prompt-label">Prompt</div>
-            <span class="model-badge">${model.split('/').pop()}</span>
-          </div>
-          <div class="card-prompt-text">${escapeHtml(prompt)}</div>
+  let html = '';
+  for (const [group, models] of Object.entries(grouped)) {
+    html += `<div class="model-dropdown-header">${group}</div>`;
+    html += models.map(m => `
+      <div class="model-option" data-id="${m.id}" onclick="selectModel('${m.id}')">
+        <div>
+          <div class="model-option-name">${m.short}</div>
+          <div class="model-option-meta">${m.id}</div>
         </div>
-        <div class="card-response">
-          <div class="card-response-text"><span class="cursor"></span></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="model-option-meta">${m.vram}</span>
+          ${m.tp ? '<span class="model-badge">TP</span>' : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+  document.getElementById('model-dropdown').innerHTML = html;
+}
+
+function toggleModelDropdown() {
+  const dd = document.getElementById('model-dropdown');
+  const btn = document.getElementById('model-btn');
+  dd.classList.toggle('open');
+  btn.classList.toggle('open');
+
+  // Highlight current
+  const thread = getThread();
+  dd.querySelectorAll('.model-option').forEach(el => {
+    el.classList.toggle('selected', el.dataset.id === thread?.model);
+  });
+}
+
+function selectModel(modelId, silent = false) {
+  const m = MODELS.find(x => x.id === modelId);
+  if (!m) return;
+
+  document.getElementById('model-btn-label').textContent = m.short + (m.tp ? ' (TP)' : '');
+  document.getElementById('model-dropdown').classList.remove('open');
+  document.getElementById('model-btn').classList.remove('open');
+
+  if (!silent) {
+    const thread = getThread();
+    if (thread) {
+      thread.model = modelId;
+      saveThreads();
+    }
+  }
+}
+
+// ===== MESSAGES =====
+function renderMessages() {
+  const thread = getThread();
+  const inner = document.getElementById('messages-inner');
+  const empty = document.getElementById('empty-state');
+
+  if (!thread || thread.messages.length === 0) {
+    inner.innerHTML = '';
+    inner.appendChild(createEmptyState());
+    return;
+  }
+
+  inner.innerHTML = thread.messages.map((msg, i) => renderMessage(msg, i)).join('');
+  scrollToBottom();
+}
+
+function createEmptyState() {
+  const div = document.createElement('div');
+  div.className = 'empty-state';
+  div.id = 'empty-state';
+  div.innerHTML = `
+    <div class="empty-state-icon">&#9672;</div>
+    <h2>How can I help?</h2>
+    <p>Send a message to start a conversation. Select a model above and adjust settings on the right.</p>
+  `;
+  return div;
+}
+
+function renderMessage(msg, index) {
+  const isUser = msg.role === 'user';
+  const model = MODELS.find(m => m.id === msg.model);
+
+  let bodyHtml = '';
+
+  // Thinking block
+  if (msg.thinking) {
+    bodyHtml += `
+      <div class="thinking-block">
+        <div class="thinking-header" onclick="this.classList.toggle('open'); this.nextElementSibling.classList.toggle('open')">
+          <span class="chevron">&#9656;</span>
+          <span class="label">Thinking</span>
+          ${msg.meta?.thinkingDuration ? `<span class="duration">${msg.meta.thinkingDuration}ms</span>` : ''}
+        </div>
+        <div class="thinking-content">${escapeHtml(msg.thinking)}</div>
+      </div>
+    `;
+  }
+
+  // Content
+  if (msg.mediaType === 'image' && msg.mediaData) {
+    bodyHtml += `<div class="media-output"><img src="data:image/png;base64,${msg.mediaData}" alt="Generated image"></div>`;
+  } else if (msg.mediaType === 'audio' && msg.mediaData) {
+    bodyHtml += `<div class="media-output"><audio controls src="data:audio/wav;base64,${msg.mediaData}"></audio></div>`;
+  } else if (msg.mediaType === 'video' && msg.mediaData) {
+    bodyHtml += `<div class="media-output"><video controls src="data:video/mp4;base64,${msg.mediaData}"></video></div>`;
+  } else if (msg.content) {
+    bodyHtml += formatContent(msg.content);
+  }
+
+  // Images in user message
+  let imageHtml = '';
+  if (msg.images && msg.images.length > 0) {
+    imageHtml = `<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">${
+      msg.images.map(img => `<img src="data:image/jpeg;base64,${img}" style="max-height:120px;border-radius:8px;border:1px solid var(--border)">`).join('')
+    }</div>`;
+  }
+
+  // Meta footer
+  let metaHtml = '';
+  if (!isUser && msg.meta) {
+    const parts = [];
+    if (msg.meta.promptTokens) parts.push(`${msg.meta.promptTokens} prompt`);
+    if (msg.meta.completionTokens) parts.push(`${msg.meta.completionTokens} completion`);
+    if (msg.meta.decodeTps) parts.push(`${msg.meta.decodeTps.toFixed(1)} tok/s`);
+    if (msg.meta.totalTimeMs) parts.push(`${(msg.meta.totalTimeMs / 1000).toFixed(1)}s`);
+    if (msg.meta.workerId) parts.push(msg.meta.workerId);
+    if (parts.length > 0) {
+      metaHtml = `
+        <div class="message-footer">
+          <span>${parts.join(' &middot; ')}</span>
+          <button class="copy-btn" onclick="copyMessage(${index})" title="Copy">&#128203;</button>
         </div>
       `;
+    }
+  }
 
-      outputArea.appendChild(card);
-      outputArea.scrollTop = outputArea.scrollHeight;
-      return card;
+  return `
+    <div class="message" data-index="${index}">
+      <div class="message-header">
+        <div class="message-avatar ${isUser ? 'user' : 'assistant'}">${isUser ? 'U' : 'A'}</div>
+        <span class="message-role">${isUser ? 'You' : 'Assistant'}</span>
+        ${!isUser && model ? `<span class="message-model">${model.short}</span>` : ''}
+      </div>
+      <div class="message-body">
+        ${imageHtml}
+        ${bodyHtml}
+      </div>
+      ${metaHtml}
+    </div>
+  `;
+}
+
+function formatContent(text) {
+  if (!text) return '';
+
+  // Basic markdown: code blocks, inline code, bold, italic, lists
+  let html = escapeHtml(text);
+
+  // Code blocks
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+    `<pre><code>${code.trim()}</code></pre>`
+  );
+
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  // Italic
+  html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+
+  // Line breaks to paragraphs
+  const paras = html.split(/\n\n+/);
+  if (paras.length > 1) {
+    html = paras.map(p => {
+      if (p.startsWith('<pre>')) return p;
+      return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+    }).join('');
+  } else {
+    html = html.replace(/\n/g, '<br>');
+  }
+
+  return html;
+}
+
+function copyMessage(index) {
+  const thread = getThread();
+  if (!thread || !thread.messages[index]) return;
+  const text = thread.messages[index].content || '';
+  navigator.clipboard.writeText(text).catch(() => {});
+}
+
+function scrollToBottom(force = false) {
+  const el = document.getElementById('chat-messages');
+  const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+  if (force || isNearBottom) {
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }
+}
+
+// ===== SEND =====
+async function sendMessage() {
+  const input = document.getElementById('message-input');
+  const text = input.value.trim();
+  if (!text && pendingImages.length === 0) return;
+  if (isGenerating) return;
+
+  const thread = getThread();
+  if (!thread) return;
+
+  const model = MODELS.find(m => m.id === thread.model);
+  if (!model) return;
+
+  // Add user message
+  const userMsg = {
+    role: 'user',
+    content: text,
+    images: [...pendingImages],
+  };
+  thread.messages.push(userMsg);
+
+  // Update title from first message
+  if (thread.messages.length === 1) {
+    thread.title = generateTitle(text);
+    renderThreadsList();
+  }
+
+  // Clear input
+  input.value = '';
+  autoResize(input);
+  pendingImages = [];
+  document.getElementById('input-images').innerHTML = '';
+
+  saveThreads();
+  renderMessages();
+  scrollToBottom(true);
+
+  // Dispatch based on model type
+  if (model.type === 'tts') {
+    await generateTTS(thread, text);
+  } else if (model.type === 'image_gen') {
+    await generateImage(thread, text);
+  } else if (model.type === 'video_gen') {
+    await generateVideo(thread, text);
+  } else {
+    // text_gen or vision_language
+    const streaming = document.getElementById('set-stream').classList.contains('on');
+    if (streaming) {
+      await generateStreaming(thread, userMsg);
+    } else {
+      await generateNonStreaming(thread, userMsg);
+    }
+  }
+}
+
+async function generateStreaming(thread, userMsg) {
+  isGenerating = true;
+  updateSendButton();
+  currentAbortController = new AbortController();
+
+  // Build messages array
+  const systemPrompt = document.getElementById('set-system').value.trim();
+  const messages = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+
+  // Include conversation history
+  for (const m of thread.messages) {
+    if (m.role === 'user') {
+      messages.push({ role: 'user', content: m.content });
+    } else if (m.role === 'assistant' && m.content) {
+      messages.push({ role: 'assistant', content: m.content });
+    }
+  }
+
+  // Add assistant placeholder
+  const assistantMsg = {
+    role: 'assistant',
+    content: '',
+    thinking: '',
+    model: thread.model,
+    meta: {},
+  };
+  thread.messages.push(assistantMsg);
+  saveThreads();
+  renderMessages();
+  scrollToBottom(true);
+
+  // Show loading
+  appendStreamingIndicator();
+
+  const body = {
+    model: thread.model,
+    messages,
+    max_tokens: parseInt(document.getElementById('set-max-tokens').value),
+    temperature: parseFloat(document.getElementById('set-temp').value),
+    top_p: parseFloat(document.getElementById('set-top-p').value),
+    stream: true,
+    user: document.getElementById('set-user').value || 'playground-user',
+    priority: document.getElementById('set-priority').value,
+    session_id: thread.sessionId,
+  };
+
+  // Add images for vision models
+  if (userMsg.images && userMsg.images.length > 0) {
+    body.images = userMsg.images;
+  }
+
+  let thinkingStartTime = null;
+  let insideThinking = false;
+  let thinkingBuffer = '';
+  let contentBuffer = '';
+  let lastUsage = null;
+
+  try {
+    const response = await fetch('/v1/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: currentAbortController.signal,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.message || `HTTP ${response.status}`);
     }
 
-    function appendToken(card, token) {
-      const textEl = card.querySelector('.card-response-text');
-      const cursor = textEl.querySelector('.cursor');
-      if (cursor) {
-        textEl.insertBefore(document.createTextNode(token), cursor);
-      } else {
-        textEl.appendChild(document.createTextNode(token));
-      }
-      outputArea.scrollTop = outputArea.scrollHeight;
-    }
+    removeStreamingIndicator();
 
-    function setCardLoading(card) {
-      const response = card.querySelector('.card-response');
-      response.innerHTML = '<div class="card-loading"><span class="loading-dots">Generating</span></div>';
-    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-    function setCardComplete(card, text) {
-      const textEl = card.querySelector('.card-response-text');
-      if (textEl) {
-        const cursor = textEl.querySelector('.cursor');
-        if (cursor) cursor.remove();
-      }
-      card.classList.remove('streaming');
-    }
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    function setCardError(card, message) {
-      const response = card.querySelector('.card-response');
-      response.innerHTML = `<div class="card-error">${escapeHtml(message)}</div>`;
-      card.classList.remove('streaming');
-    }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-    function addCardStats(card, stats) {
-      const existing = card.querySelector('.card-stats');
-      if (existing) existing.remove();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
 
-      const statsEl = document.createElement('div');
-      statsEl.className = 'card-stats';
-      statsEl.innerHTML = `
-        <div class="stat">
-          <span class="stat-label">tokens</span>
-          <span class="stat-value accent">${stats.prompt_tokens || 0} + ${stats.completion_tokens || 0}</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">finish</span>
-          <span class="stat-value">${stats.finish_reason || '—'}</span>
-        </div>
-        ${stats.total_time_ms ? `
-        <div class="stat">
-          <span class="stat-label">time</span>
-          <span class="stat-value">${(stats.total_time_ms / 1000).toFixed(2)}s</span>
-        </div>` : ''}
-        ${stats.completion_tokens && stats.total_time_ms ? `
-        <div class="stat">
-          <span class="stat-label">tok/s</span>
-          <span class="stat-value accent">${(stats.completion_tokens / (stats.total_time_ms / 1000)).toFixed(1)}</span>
-        </div>` : ''}
-      `;
-      card.appendChild(statsEl);
-    }
+        try {
+          const parsed = JSON.parse(data);
 
-    // Send
-    async function handleSend() {
-      const prompt = promptInput.value.trim();
-      if (!prompt || state.streaming) return;
-
-      const model = modelSelect.value;
-      const modelType = getModelType(model);
-
-      promptInput.value = '';
-      promptInput.style.height = 'auto';
-      charCount.textContent = '';
-
-      const card = createCompletionCard(prompt, model);
-
-      if (modelType === 'image_gen') {
-        await sendImageGen(card, { model, prompt });
-      } else if (modelType === 'tts') {
-        await sendTTS(card, { model, input: prompt });
-      } else if (modelType === 'video_gen') {
-        await sendVideoGen(card, { model, prompt });
-      } else {
-        // text_gen or vision_language — use messages format
-        const systemPrompt = document.getElementById('system-prompt').value.trim();
-        const messages = [];
-        if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
-        messages.push({ role: 'user', content: prompt });
-
-        const params = {
-          model,
-          messages,
-          max_tokens: parseInt(tokensSlider.value),
-          temperature: parseFloat(tempSlider.value),
-          top_p: parseFloat(topPSlider.value),
-          stream: state.streamEnabled,
-          priority: prioritySelect.value,
-          user: userIdInput.value.trim() || 'playground-user',
-        };
-
-        if (state.streamEnabled) {
-          await sendStreaming(card, params);
-        } else {
-          await sendNonStreaming(card, params);
-        }
-      }
-
-      loadHistory();
-    }
-
-    // Media generation endpoints
-    async function sendImageGen(card, params) {
-      state.streaming = true;
-      updateStreamingUI(true);
-      setCardLoading(card);
-
-      try {
-        const res = await fetch('/v1/images/generations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(params),
-        });
-        const data = await res.json();
-        if (data.error) { setCardError(card, data.error.message); return; }
-
-        const imgSrc = 'data:image/png;base64,' + data.data[0].b64_json;
-        card.querySelector('.card-response').innerHTML =
-          `<img src="${imgSrc}" style="max-width:100%; border-radius:8px;" alt="Generated image">`;
-        card.classList.remove('streaming');
-        state.mediaHistory.unshift({ prompt: params.prompt, model: params.model, type: 'image', status: 'completed', created_at: new Date().toISOString() });
-      } catch (err) {
-        setCardError(card, err.message || 'Image generation failed');
-      } finally {
-        state.streaming = false;
-        updateStreamingUI(false);
-      }
-    }
-
-    async function sendTTS(card, params) {
-      state.streaming = true;
-      updateStreamingUI(true);
-      setCardLoading(card);
-
-      try {
-        const res = await fetch('/v1/audio/speech', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(params),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          setCardError(card, err?.message || `HTTP ${res.status}`);
-          return;
-        }
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        card.querySelector('.card-response').innerHTML =
-          `<audio controls src="${url}" style="width:100%"></audio>`;
-        card.classList.remove('streaming');
-        state.mediaHistory.unshift({ prompt: params.input, model: params.model, type: 'audio', status: 'completed', created_at: new Date().toISOString() });
-      } catch (err) {
-        setCardError(card, err.message || 'TTS failed');
-      } finally {
-        state.streaming = false;
-        updateStreamingUI(false);
-      }
-    }
-
-    async function sendVideoGen(card, params) {
-      state.streaming = true;
-      updateStreamingUI(true);
-      setCardLoading(card);
-
-      try {
-        const res = await fetch('/v1/video/generations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(params),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          setCardError(card, err?.message || `HTTP ${res.status}`);
-          return;
-        }
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        card.querySelector('.card-response').innerHTML =
-          `<video controls src="${url}" style="max-width:100%; border-radius:8px;"></video>`;
-        card.classList.remove('streaming');
-        state.mediaHistory.unshift({ prompt: params.prompt, model: params.model, type: 'video', status: 'completed', created_at: new Date().toISOString() });
-      } catch (err) {
-        setCardError(card, err.message || 'Video generation failed');
-      } finally {
-        state.streaming = false;
-        updateStreamingUI(false);
-      }
-    }
-
-    async function sendStreaming(card, params) {
-      state.streaming = true;
-      updateStreamingUI(true);
-
-      const controller = new AbortController();
-      state.currentController = controller;
-
-      let fullText = '';
-      let lastStats = null;
-      let lastFinishReason = null;
-
-      try {
-        const res = await fetch('/v1/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(params),
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          setCardError(card, err?.error?.message || `HTTP ${res.status}`);
-          return;
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const payload = line.slice(6).trim();
-
-            if (payload === '[DONE]') {
-              setCardComplete(card, fullText);
-              if (lastStats) addCardStats(card, { ...lastStats, finish_reason: lastFinishReason });
-              continue;
-            }
-
-            try {
-              const data = JSON.parse(payload);
-              if (data.error) {
-                setCardError(card, data.error.message);
-                break;
-              }
-              if (data.choices && data.choices[0]) {
-                const choice = data.choices[0];
-                if (choice.text) {
-                  fullText += choice.text;
-                  appendToken(card, choice.text);
-                }
-                if (choice.finish_reason) {
-                  lastFinishReason = choice.finish_reason;
-                }
-              }
-              if (data.usage) {
-                lastStats = data.usage;
-              }
-            } catch (e) {
-              // skip malformed JSON
-            }
+          if (parsed.error) {
+            assistantMsg.content += '\n\nError: ' + parsed.error.message;
+            break;
           }
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          setCardError(card, err.message || 'Connection failed');
-        }
-      } finally {
-        state.streaming = false;
-        state.currentController = null;
-        updateStreamingUI(false);
-        setCardComplete(card, fullText);
-        if (lastStats && !card.querySelector('.card-stats')) {
-          addCardStats(card, { ...lastStats, finish_reason: lastFinishReason });
-        }
+
+          if (parsed.usage) lastUsage = parsed.usage;
+
+          // Handle thinking_content from server (non-streaming final result)
+          if (parsed.thinking_content) {
+            assistantMsg.thinking = parsed.thinking_content;
+            if (!thinkingStartTime) thinkingStartTime = Date.now();
+          }
+
+          const chunk = parsed.choices?.[0]?.text || '';
+          if (chunk) {
+            // Parse thinking tags from streamed text
+            const result = processChunk(chunk, insideThinking, thinkingBuffer, contentBuffer, thinkingStartTime);
+            insideThinking = result.insideThinking;
+            thinkingBuffer = result.thinkingBuffer;
+            contentBuffer = result.contentBuffer;
+            if (!thinkingStartTime && result.thinkingStarted) thinkingStartTime = Date.now();
+
+            assistantMsg.thinking = extractThinking(thinkingBuffer) || assistantMsg.thinking;
+            assistantMsg.content = extractContent(contentBuffer);
+          }
+
+          // Also set content from parsed choices if not set by processChunk
+          if (!assistantMsg.content && parsed.choices?.[0]?.text) {
+            assistantMsg.content = parsed.choices[0].text;
+          }
+
+          updateLastMessage(assistantMsg);
+          scrollToBottom();
+
+        } catch (parseErr) { /* skip unparseable chunks */ }
       }
     }
 
-    async function sendNonStreaming(card, params) {
-      state.streaming = true;
-      updateStreamingUI(true);
-      setCardLoading(card);
-
-      try {
-        const res = await fetch('/v1/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(params),
-        });
-
-        const data = await res.json();
-
-        if (data.error) {
-          setCardError(card, data.error.message);
-          return;
-        }
-
-        const text = data.choices?.[0]?.text || '';
-        const finishReason = data.choices?.[0]?.finish_reason || '';
-
-        card.querySelector('.card-response').innerHTML =
-          `<div class="card-response-text">${escapeHtml(text)}</div>`;
-        card.classList.remove('streaming');
-
-        addCardStats(card, {
-          ...data.usage,
-          finish_reason: finishReason,
-        });
-      } catch (err) {
-        setCardError(card, err.message || 'Request failed');
-      } finally {
-        state.streaming = false;
-        updateStreamingUI(false);
-      }
+    // Final meta
+    if (lastUsage) {
+      assistantMsg.meta = {
+        promptTokens: lastUsage.prompt_tokens,
+        completionTokens: lastUsage.completion_tokens,
+        cachedTokens: lastUsage.cached_tokens,
+        prefillTimeMs: lastUsage.prefill_time_ms,
+        decodeTimeMs: lastUsage.decode_time_ms,
+        totalTimeMs: lastUsage.total_time_ms,
+        decodeTps: lastUsage.completion_tokens && lastUsage.decode_time_ms
+          ? (lastUsage.completion_tokens / (lastUsage.decode_time_ms / 1000))
+          : null,
+        thinkingDuration: thinkingStartTime ? Date.now() - thinkingStartTime : null,
+      };
     }
 
-    function updateStreamingUI(isStreaming) {
-      sendBtn.disabled = isStreaming;
-      if (isStreaming) {
-        statusDot.className = 'status-dot streaming';
-        statusText.textContent = 'generating...';
-      } else {
-        checkHealth();
-      }
+  } catch (err) {
+    removeStreamingIndicator();
+    if (err.name === 'AbortError') {
+      assistantMsg.content += assistantMsg.content ? '\n\n[Cancelled]' : '[Cancelled]';
+    } else {
+      assistantMsg.content = `Error: ${err.message}`;
+    }
+  }
+
+  saveThreads();
+  renderMessages();
+  scrollToBottom(true);
+  isGenerating = false;
+  currentAbortController = null;
+  updateSendButton();
+}
+
+async function generateNonStreaming(thread, userMsg) {
+  isGenerating = true;
+  updateSendButton();
+
+  const systemPrompt = document.getElementById('set-system').value.trim();
+  const messages = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  for (const m of thread.messages) {
+    if (m.role === 'user') messages.push({ role: 'user', content: m.content });
+    else if (m.role === 'assistant' && m.content) messages.push({ role: 'assistant', content: m.content });
+  }
+
+  const assistantMsg = {
+    role: 'assistant',
+    content: '',
+    model: thread.model,
+    meta: {},
+  };
+  thread.messages.push(assistantMsg);
+  saveThreads();
+  renderMessages();
+  appendStreamingIndicator();
+  scrollToBottom(true);
+
+  const body = {
+    model: thread.model,
+    messages,
+    max_tokens: parseInt(document.getElementById('set-max-tokens').value),
+    temperature: parseFloat(document.getElementById('set-temp').value),
+    top_p: parseFloat(document.getElementById('set-top-p').value),
+    stream: false,
+    user: document.getElementById('set-user').value || 'playground-user',
+    priority: document.getElementById('set-priority').value,
+    session_id: thread.sessionId,
+  };
+
+  if (userMsg.images?.length > 0) body.images = userMsg.images;
+
+  try {
+    const response = await fetch('/v1/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    removeStreamingIndicator();
+    const result = await response.json();
+
+    if (result.error) throw new Error(result.error.message || result.error);
+
+    const text = result.choices?.[0]?.text || '';
+    const { thinking, content } = parseThinkingFromFull(text);
+
+    assistantMsg.thinking = thinking;
+    assistantMsg.content = content;
+
+    if (result.usage) {
+      assistantMsg.meta = {
+        promptTokens: result.usage.prompt_tokens,
+        completionTokens: result.usage.completion_tokens,
+        totalTimeMs: result.usage.total_time_ms,
+        decodeTps: result.usage.completion_tokens && result.usage.decode_time_ms
+          ? (result.usage.completion_tokens / (result.usage.decode_time_ms / 1000))
+          : null,
+      };
     }
 
-    // Health check
-    async function checkHealth() {
-      try {
-        const res = await fetch('/v1/completions', { method: 'GET' });
-        if (res.ok) {
-          statusDot.className = 'status-dot connected';
-          statusText.textContent = 'connected';
-        } else {
-          statusDot.className = 'status-dot error';
-          statusText.textContent = 'api error';
-        }
-      } catch {
-        statusDot.className = 'status-dot error';
-        statusText.textContent = 'disconnected';
+    if (result.session_id) thread.sessionId = result.session_id;
+
+  } catch (err) {
+    removeStreamingIndicator();
+    assistantMsg.content = `Error: ${err.message}`;
+  }
+
+  saveThreads();
+  renderMessages();
+  scrollToBottom(true);
+  isGenerating = false;
+  updateSendButton();
+}
+
+// ===== TTS / IMAGE / VIDEO (non-completions endpoints) =====
+async function generateTTS(thread, text) {
+  isGenerating = true;
+  updateSendButton();
+
+  const assistantMsg = { role: 'assistant', content: '', model: thread.model, meta: {}, mediaType: 'audio' };
+  thread.messages.push(assistantMsg);
+  renderMessages();
+  appendStreamingIndicator();
+  scrollToBottom(true);
+
+  try {
+    const response = await fetch('/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: thread.model, input: text }),
+    });
+
+    removeStreamingIndicator();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const blob = await response.blob();
+    const reader = new FileReader();
+    reader.onload = () => {
+      assistantMsg.mediaData = reader.result.split(',')[1];
+      assistantMsg.content = 'Audio generated';
+      saveThreads();
+      renderMessages();
+      scrollToBottom(true);
+    };
+    reader.readAsDataURL(blob);
+
+  } catch (err) {
+    removeStreamingIndicator();
+    assistantMsg.content = `Error: ${err.message}`;
+    saveThreads();
+    renderMessages();
+  }
+
+  isGenerating = false;
+  updateSendButton();
+}
+
+async function generateImage(thread, text) {
+  isGenerating = true;
+  updateSendButton();
+
+  const assistantMsg = { role: 'assistant', content: '', model: thread.model, meta: {}, mediaType: 'image' };
+  thread.messages.push(assistantMsg);
+  renderMessages();
+  appendStreamingIndicator();
+  scrollToBottom(true);
+
+  try {
+    const response = await fetch('/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: thread.model, prompt: text }),
+    });
+
+    removeStreamingIndicator();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const result = await response.json();
+    assistantMsg.mediaData = result.data?.[0]?.b64_json || '';
+    assistantMsg.content = 'Image generated';
+    saveThreads();
+    renderMessages();
+    scrollToBottom(true);
+
+  } catch (err) {
+    removeStreamingIndicator();
+    assistantMsg.content = `Error: ${err.message}`;
+    saveThreads();
+    renderMessages();
+  }
+
+  isGenerating = false;
+  updateSendButton();
+}
+
+async function generateVideo(thread, text) {
+  isGenerating = true;
+  updateSendButton();
+
+  const assistantMsg = { role: 'assistant', content: 'Generating video... this may take a while.', model: thread.model, meta: {}, mediaType: 'video' };
+  thread.messages.push(assistantMsg);
+  renderMessages();
+  appendStreamingIndicator();
+  scrollToBottom(true);
+
+  try {
+    const response = await fetch('/v1/video/generations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: thread.model, prompt: text }),
+    });
+
+    removeStreamingIndicator();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const blob = await response.blob();
+    const reader = new FileReader();
+    reader.onload = () => {
+      assistantMsg.mediaData = reader.result.split(',')[1];
+      assistantMsg.content = 'Video generated';
+      saveThreads();
+      renderMessages();
+      scrollToBottom(true);
+    };
+    reader.readAsDataURL(blob);
+
+  } catch (err) {
+    removeStreamingIndicator();
+    assistantMsg.content = `Error: ${err.message}`;
+    saveThreads();
+    renderMessages();
+  }
+
+  isGenerating = false;
+  updateSendButton();
+}
+
+// ===== THINKING PARSER =====
+function processChunk(chunk, insideThinking, thinkingBuf, contentBuf, startTime) {
+  let result = {
+    insideThinking,
+    thinkingBuffer: thinkingBuf,
+    contentBuffer: contentBuf,
+    thinkingStarted: false,
+  };
+
+  // Simple approach: accumulate and detect tags
+  if (insideThinking) {
+    result.thinkingBuffer += chunk;
+    // Check for closing tag
+    const closeIdx = result.thinkingBuffer.indexOf('</think>');
+    if (closeIdx !== -1) {
+      const afterClose = result.thinkingBuffer.slice(closeIdx + 8);
+      result.thinkingBuffer = result.thinkingBuffer.slice(0, closeIdx);
+      result.contentBuffer += afterClose;
+      result.insideThinking = false;
+    }
+  } else {
+    result.contentBuffer += chunk;
+    // Check for opening tag
+    const openIdx = result.contentBuffer.indexOf('<think>');
+    if (openIdx !== -1) {
+      const beforeOpen = result.contentBuffer.slice(0, openIdx);
+      const afterOpen = result.contentBuffer.slice(openIdx + 7);
+      result.contentBuffer = beforeOpen;
+      result.thinkingBuffer += afterOpen;
+      result.insideThinking = true;
+      result.thinkingStarted = true;
+
+      // Check if close tag is already in the thinking buffer
+      const closeIdx = result.thinkingBuffer.indexOf('</think>');
+      if (closeIdx !== -1) {
+        const afterClose = result.thinkingBuffer.slice(closeIdx + 8);
+        result.thinkingBuffer = result.thinkingBuffer.slice(0, closeIdx);
+        result.contentBuffer += afterClose;
+        result.insideThinking = false;
       }
     }
+  }
 
-    // History
-    async function loadHistory() {
-      try {
-        const res = await fetch('/v1/completions');
-        if (!res.ok) return;
-        const completions = await res.json();
-        state.completions = completions;
-        renderHistory(completions);
-        statusRight.textContent = `${completions.length} completion${completions.length !== 1 ? 's' : ''}`;
-      } catch {
-        // silent
-      }
-    }
+  return result;
+}
 
-    function renderHistory(completions) {
-      historyList.innerHTML = '';
-      // Merge DB completions with client-side media history
-      const mediaItems = state.mediaHistory.map(m => ({
-        prompt: m.prompt, model: m.model, status: m.status,
-        total_tokens: 0, created_at: m.created_at, _mediaType: m.type,
-      }));
-      const all = [...mediaItems, ...completions]
-        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
-        .slice(0, 30);
+function extractThinking(buf) { return buf.trim(); }
+function extractContent(buf) { return buf.trim(); }
 
-      for (const c of all) {
-        const item = document.createElement('div');
-        item.className = 'history-item';
-        const typeLabel = c._mediaType ? c._mediaType : (c.total_tokens || 0) + ' tok';
-        item.innerHTML = `
-          <div class="history-prompt">${escapeHtml(c.prompt || '(empty)')}</div>
-          <div class="history-meta">
-            <span>${c.model?.split('/').pop() || '?'}</span>
-            <span>${typeLabel}</span>
-            <span>${c.status || '?'}</span>
-          </div>
-        `;
-        if (!c._mediaType) item.addEventListener('click', () => showCompletion(c));
-        historyList.appendChild(item);
-      }
-    }
+function parseThinkingFromFull(text) {
+  const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/);
+  if (thinkMatch) {
+    const thinking = thinkMatch[1].trim();
+    const content = text.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+    return { thinking, content };
+  }
+  return { thinking: '', content: text };
+}
 
-    function showCompletion(c) {
-      if (emptyState) emptyState.remove();
+// ===== STREAMING UI HELPERS =====
+function appendStreamingIndicator() {
+  const inner = document.getElementById('messages-inner');
+  const existing = inner.querySelector('.streaming-indicator');
+  if (existing) return;
 
-      const card = document.createElement('div');
-      card.className = 'completion-card';
-      card.innerHTML = `
-        <div class="card-prompt">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <div class="card-prompt-label">Prompt</div>
-            <span class="model-badge">${(c.model || '').split('/').pop()}</span>
-          </div>
-          <div class="card-prompt-text">${escapeHtml(c.prompt || '')}</div>
+  generationStartTime = Date.now();
+
+  const div = document.createElement('div');
+  div.className = 'streaming-indicator';
+  div.style.paddingLeft = '34px';
+  div.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>' +
+    '<div class="elapsed-timer" id="elapsed-timer">0s</div>';
+  inner.appendChild(div);
+  scrollToBottom(true);
+
+  // Start elapsed timer
+  clearInterval(elapsedInterval);
+  elapsedInterval = setInterval(() => {
+    const el = document.getElementById('elapsed-timer');
+    if (!el || !generationStartTime) return;
+    const elapsed = Math.floor((Date.now() - generationStartTime) / 1000);
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    el.textContent = mins > 0 ? `${mins}m ${secs}s elapsed` : `${secs}s elapsed`;
+  }, 1000);
+}
+
+function removeStreamingIndicator() {
+  document.querySelectorAll('.streaming-indicator').forEach(el => el.remove());
+  clearInterval(elapsedInterval);
+  elapsedInterval = null;
+  generationStartTime = null;
+}
+
+function updateLastMessage(msg) {
+  const inner = document.getElementById('messages-inner');
+  const messages = inner.querySelectorAll('.message');
+  const last = messages[messages.length - 1];
+  if (!last) return;
+
+  const body = last.querySelector('.message-body');
+  if (!body) return;
+
+  let html = '';
+
+  // Thinking
+  if (msg.thinking) {
+    html += `
+      <div class="thinking-block">
+        <div class="thinking-header open" onclick="this.classList.toggle('open'); this.nextElementSibling.classList.toggle('open')">
+          <span class="chevron">&#9656;</span>
+          <span class="label">Thinking...</span>
         </div>
-        <div class="card-response">
-          <div class="card-response-text">${escapeHtml(c.completion_text || '(no response)')}</div>
-        </div>
-      `;
+        <div class="thinking-content open">${escapeHtml(msg.thinking)}</div>
+      </div>
+    `;
+  }
 
-      addCardStats(card, {
-        prompt_tokens: c.prompt_tokens,
-        completion_tokens: c.completion_tokens,
-        finish_reason: c.finish_reason,
-        total_time_ms: c.total_time_ms,
-      });
+  // Content
+  if (msg.content) {
+    html += formatContent(msg.content);
+  }
 
-      outputArea.appendChild(card);
-      outputArea.scrollTop = outputArea.scrollHeight;
+  html += '<span class="streaming-cursor"></span>';
+  body.innerHTML = html;
+}
+
+function updateSendButton() {
+  const sendBtn = document.getElementById('send-btn');
+  if (isGenerating) {
+    sendBtn.outerHTML = '<button class="stop-btn" id="send-btn" onclick="stopGeneration()" title="Stop">&#9632;</button>';
+  } else {
+    const existing = document.getElementById('send-btn');
+    if (existing && existing.classList.contains('stop-btn')) {
+      existing.outerHTML = '<button class="send-btn" id="send-btn" onclick="sendMessage()" title="Send">&#9654;</button>';
     }
+  }
+}
 
-    function escapeHtml(str) {
-      const d = document.createElement('div');
-      d.textContent = str;
-      return d.innerHTML;
-    }
+function stopGeneration() {
+  if (currentAbortController) {
+    currentAbortController.abort();
+    currentAbortController = null;
+  }
+}
 
-    // Queue stats polling
-    async function pollQueueStats() {
-      try {
-        const res = await fetch('/v1/completions/stats');
-        if (!res.ok) return;
-        const stats = await res.json();
-        queueStats.textContent = `Queue: ${stats.queueDepth} | Active: ${stats.activeCount} | Tokens: ${stats.totalQueuedTokens}`;
-      } catch {
-        queueStats.textContent = '';
-      }
-    }
+// ===== IMAGE UPLOAD =====
+function handleImageUpload(event) {
+  const files = event.target.files;
+  for (const file of files) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1];
+      pendingImages.push(base64);
+      renderPendingImages();
+    };
+    reader.readAsDataURL(file);
+  }
+  event.target.value = '';
+}
 
-    // Init
-    checkHealth();
-    loadHistory();
-    pollQueueStats();
-    setInterval(checkHealth, 15000);
-    setInterval(pollQueueStats, 2000);
-    promptInput.focus();
-  </script>
+function renderPendingImages() {
+  const container = document.getElementById('input-images');
+  container.innerHTML = pendingImages.map((img, i) => `
+    <div class="input-image-thumb">
+      <img src="data:image/jpeg;base64,${img}">
+      <button class="remove" onclick="removePendingImage(${i})">&times;</button>
+    </div>
+  `).join('');
+}
+
+function removePendingImage(index) {
+  pendingImages.splice(index, 1);
+  renderPendingImages();
+}
+
+// ===== INPUT =====
+function handleInputKey(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
+// ===== SETTINGS =====
+function toggleSettings() {
+  const panel = document.getElementById('settings-panel');
+  const btn = document.getElementById('settings-toggle');
+  panel.classList.toggle('open');
+  btn.classList.toggle('active');
+}
+
+// ===== STATS =====
+function startStatsPolling() {
+  updateStats();
+  statsInterval = setInterval(updateStats, 2000);
+}
+
+async function updateStats() {
+  try {
+    const response = await fetch('/v1/completions/stats');
+    if (!response.ok) throw new Error('stats fetch failed');
+    const stats = await response.json();
+
+    document.getElementById('stat-queue').textContent = stats.queueDepth || 0;
+    document.getElementById('stat-active').textContent = stats.activeCount || 0;
+    document.getElementById('stat-tokens').textContent = stats.totalQueuedTokens || 0;
+
+    // Connection status
+    document.getElementById('conn-dot').className = 'stat-dot';
+    document.getElementById('conn-label').textContent = 'connected';
+  } catch {
+    document.getElementById('conn-dot').className = 'stat-dot error';
+    document.getElementById('conn-label').textContent = 'disconnected';
+  }
+}
+
+// ===== UTILS =====
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Init on load
+document.addEventListener('DOMContentLoaded', init);
+</script>
 </body>
 </html>

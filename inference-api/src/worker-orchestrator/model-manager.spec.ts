@@ -45,6 +45,8 @@ function mockRegistry(snapshots: WorkerSnapshot[]) {
     getWorker: jest.fn((id: string) => workers.get(id)?.service),
     getAllWorkers: jest.fn(() => Array.from(workers.values())),
     pollAllWorkers: jest.fn(),
+    getCurrentMode: jest.fn(() => 'individual'),
+    switchMode: jest.fn(),
     _workers: workers,
   } as unknown as WorkerRegistry & { _workers: Map<string, any> };
 }

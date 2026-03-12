@@ -18,15 +18,25 @@ export class WorkerOrchestratorModule implements OnModuleInit {
   constructor(private readonly registry: WorkerRegistry) {}
 
   async onModuleInit() {
-    // Register initial workers
-    // TODO: load from config/env instead of hardcoding
-    const workers = [
-      { id: 'worker-0', url: process.env.GPU_WORKER_0_URL || 'localhost:50051' },
-      { id: 'worker-1', url: process.env.GPU_WORKER_1_URL || 'localhost:50052' },
-    ];
+    // Register initial workers based on mode
+    const initialMode = process.env.WORKER_MODE || 'individual';
 
-    for (const w of workers) {
-      this.registry.addWorker(w);
+    if (initialMode === 'tensor-parallel') {
+      this.registry.setCurrentMode('tensor-parallel');
+      const workers = [
+        { id: 'tp-worker-0', url: process.env.GPU_TP_WORKER_URL || 'localhost:50051', mode: 'tensor-parallel' as const },
+      ];
+      for (const w of workers) {
+        this.registry.addWorker(w);
+      }
+    } else {
+      const workers = [
+        { id: 'worker-0', url: process.env.GPU_WORKER_0_URL || 'localhost:50051', mode: 'individual' as const },
+        { id: 'worker-1', url: process.env.GPU_WORKER_1_URL || 'localhost:50052', mode: 'individual' as const },
+      ];
+      for (const w of workers) {
+        this.registry.addWorker(w);
+      }
     }
 
     // Initial poll + start periodic polling

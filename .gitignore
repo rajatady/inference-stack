@@ -1,3 +1,20 @@
+# IDE
+.idea/
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/projects/
+.claude/plugins/
+.claude/plans/
+
+# SQLite database
+*.sqlite
+
+# Python
+__pycache__/
+*.pyc
+gpu-worker/generated/
+
 ### Node template
 # Logs
 logs

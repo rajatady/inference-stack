@@ -37,15 +37,20 @@ class InferenceResult:
     cache_save_ms: float = 0.0
     cache_size_bytes: int = 0
     cached_tokens: int = 0
+    # Thinking mode (Qwen3-style <think>...</think>)
+    thinking_text: Optional[str] = None
+    is_thinking: bool = False
 
 
 class BasePipeline(ABC):
     """Abstract base for all inference pipelines."""
 
-    def __init__(self, model_id: str, device: str, quantization: str = "fp16"):
+    def __init__(self, model_id: str, device: str, quantization: str = "fp16",
+                 tp_mode: bool = False):
         self.model_id = model_id
         self.device = device
         self.quantization = quantization
+        self.tp_mode = tp_mode
         self.vram_used_bytes: int = 0
         self.max_context_length: int = 0
         self.vocab_size: int = 0

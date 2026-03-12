@@ -294,6 +294,7 @@ export class SchedulerService implements OnModuleDestroy {
       request.state = 'active';
 
       let fullText = '';
+      let thinkingContent = '';
       let usage: any = null;
       let finishReason = '';
 
@@ -323,7 +324,11 @@ export class SchedulerService implements OnModuleDestroy {
         .subscribe({
           next: (response) => {
             if (response.chunk) {
-              fullText += response.chunk.text || '';
+              if (response.chunk.is_thinking) {
+                thinkingContent += response.chunk.text || '';
+              } else {
+                fullText += response.chunk.text || '';
+              }
             }
             if (response.complete) {
               finishReason = response.complete.finish_reason;
@@ -350,6 +355,7 @@ export class SchedulerService implements OnModuleDestroy {
               choices: [
                 { text: fullText, index: 0, finish_reason: finishReason },
               ],
+              ...(thinkingContent && { thinking_content: thinkingContent }),
               usage: {
                 prompt_tokens: usage?.prompt_tokens ?? 0,
                 completion_tokens: usage?.completion_tokens ?? 0,
@@ -426,9 +432,9 @@ export class SchedulerService implements OnModuleDestroy {
       }
 
       // Build map to track per-request results
-      const requestMap = new Map<string, { request: QueuedRequest; text: string; usage: any }>();
+      const requestMap = new Map<string, { request: QueuedRequest; text: string; thinkingContent: string; usage: any }>();
       for (const req of requests) {
-        requestMap.set(req.id, { request: req, text: '', usage: null });
+        requestMap.set(req.id, { request: req, text: '', thinkingContent: '', usage: null });
       }
 
       const subscription = worker
@@ -456,7 +462,11 @@ export class SchedulerService implements OnModuleDestroy {
             if (!entry) return;
 
             if (response.chunk) {
-              entry.text += response.chunk.text || '';
+              if (response.chunk.is_thinking) {
+                entry.thinkingContent += response.chunk.text || '';
+              } else {
+                entry.text += response.chunk.text || '';
+              }
             }
             if (response.complete) {
               entry.usage = response.complete.usage;
@@ -470,6 +480,7 @@ export class SchedulerService implements OnModuleDestroy {
                 choices: [
                   { text: entry.text, index: 0, finish_reason: response.complete.finish_reason },
                 ],
+                ...(entry.thinkingContent && { thinking_content: entry.thinkingContent }),
                 usage: {
                   prompt_tokens: entry.usage?.prompt_tokens ?? 0,
                   completion_tokens: entry.usage?.completion_tokens ?? 0,

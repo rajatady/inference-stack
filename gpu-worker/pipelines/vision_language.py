@@ -62,6 +62,14 @@ class VisionLanguagePipeline(BasePipeline):
         prompt = request.get("prompt", "")
         image_data = request.get("image_data", None)
 
+        # If messages are provided (chat format), extract the last user message as prompt
+        msgs = request.get("messages", [])
+        if not prompt and msgs:
+            for m in reversed(msgs):
+                if m.get("role") == "user" and m.get("content"):
+                    prompt = m["content"]
+                    break
+
         if not prompt:
             yield InferenceResult(is_complete=True, finish_reason="ERROR")
             return

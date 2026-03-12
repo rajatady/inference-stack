@@ -3,7 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { GpuWorkerService } from '../gpu-worker/gpu-worker.service';
 import { WorkerRegistry } from './worker-registry';
 import { WorkerSnapshot, ModelCapabilities } from './interfaces';
-import { getDefaultGpu } from '../config/model-roster';
+import { getDefaultGpu, isTensorParallel } from '../config/model-roster';
 
 @Injectable()
 export class ModelManager {
@@ -45,6 +45,18 @@ export class ModelManager {
     modelId: string,
     quantization?: string,
   ): Promise<{ workerId: string; worker: GpuWorkerService }> {
+    // Auto mode switching: if model needs TP and we're in individual mode (or vice versa)
+    const needsTP = isTensorParallel(modelId);
+    const currentMode = this.registry.getCurrentMode();
+
+    if (needsTP && currentMode !== 'tensor-parallel') {
+      this.logger.log(`Model ${modelId} requires tensor parallelism — switching mode`);
+      await this.registry.switchMode('tensor-parallel');
+    } else if (!needsTP && currentMode === 'tensor-parallel') {
+      this.logger.log(`Model ${modelId} is single-GPU — switching to individual mode`);
+      await this.registry.switchMode('individual');
+    }
+
     // Check if already loaded
     const ready = this.getWorkersWithModel(modelId);
     if (ready.length > 0) {

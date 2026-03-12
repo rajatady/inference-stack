@@ -47,6 +47,7 @@ MODEL_TYPE_REGISTRY = {
     "hexgrad/Kokoro-82M": "tts",
     "stabilityai/sd-turbo": "image_gen",
     "THUDM/CogVideoX-2b": "video_gen",
+    "Qwen/Qwen3-14B": "text_gen",
 }
 
 PIPELINE_CLASSES = {
@@ -75,9 +76,12 @@ class GpuWorker:
     """Manages a single GPU — loads models, runs inference, reports state."""
 
     def __init__(self, gpu_id: int = 0, worker_id: str = "worker-0",
-                 kv_cache_max_bytes: int = 200 * 1024**3):
+                 kv_cache_max_bytes: int = 200 * 1024**3,
+                 tp_mode: bool = False, world_size: int = 1):
         self.gpu_id = gpu_id
         self.worker_id = worker_id
+        self.tp_mode = tp_mode
+        self.world_size = world_size
         self.device = f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu"
         self.start_time = time.time()
         self.total_inferences = 0
@@ -221,10 +225,11 @@ class GpuWorker:
             vram_before = torch.cuda.memory_allocated(self.gpu_id) if torch.cuda.is_available() else 0
 
             try:
-                # Pass kv_store to text_gen pipelines for disaggregated caching
+                # Pass kv_store and tp_mode to text_gen pipelines
                 kwargs = dict(model_id=model_id, device=self.device, quantization=quantization)
                 if detected_type == "text_gen":
                     kwargs["kv_store"] = self.kv_store
+                    kwargs["tp_mode"] = self.tp_mode
                 pipeline = pipeline_cls(**kwargs)
                 capabilities = pipeline.load(model_path=model_path)
 
@@ -376,6 +381,23 @@ class GpuWorker:
     def get_worker_state(self) -> dict:
         """Return full worker state for the gateway."""
         gpu_info = self.get_gpu_info()
+
+        # In TP mode, aggregate VRAM from all GPUs
+        if self.tp_mode and self.world_size > 1 and torch.cuda.is_available():
+            total_vram = 0
+            total_used = 0
+            for i in range(self.world_size):
+                try:
+                    props = torch.cuda.get_device_properties(i)
+                    total_vram += props.total_memory
+                    total_used += torch.cuda.memory_allocated(i)
+                except Exception:
+                    pass
+            gpu_info["vram_total_bytes"] = total_vram
+            gpu_info["vram_used_bytes"] = total_used
+            gpu_info["vram_available_bytes"] = total_vram - total_used
+            gpu_info["gpu_id"] = f"gpu-tp-{self.world_size}"
+
         models = [
             {
                 "model_id": info.model_id,

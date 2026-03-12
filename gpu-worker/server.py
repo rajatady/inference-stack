@@ -4,12 +4,16 @@ GPU Worker gRPC Server
 Entry point for the GPU worker process. Starts a gRPC server that
 implements the InferenceWorker service from inference_worker.proto.
 
-Usage:
+Usage (single GPU):
     python server.py --port 50051 --gpu-id 0
+
+Usage (tensor parallelism across N GPUs):
+    torchrun --nproc_per_node=2 server.py --port 50051 --tp
 """
 
 import argparse
 import logging
+import os
 import signal
 import sys
 import threading
@@ -38,8 +42,9 @@ MAX_MESSAGE_LENGTH = 100 * 1024 * 1024
 class InferenceWorkerServicer(pb2_grpc.InferenceWorkerServicer):
     """gRPC service implementation — delegates everything to GpuWorker."""
 
-    def __init__(self, worker: GpuWorker):
+    def __init__(self, worker: GpuWorker, tp_coordinator=None):
         self.worker = worker
+        self.tp = tp_coordinator  # TPCoordinator for rank coordination (None if single-GPU)
 
     def Health(self, request, context):
         result = self.worker.health()
@@ -61,6 +66,15 @@ class InferenceWorkerServicer(pb2_grpc.InferenceWorkerServicer):
             time.sleep(max(request.min_interval_ms / 1000.0, 0.1))
 
     def LoadModel(self, request, context):
+        # In TP mode, broadcast load command so all ranks load the model
+        if self.tp:
+            self.tp.broadcast_command({
+                "action": "load_model",
+                "model_id": request.model_id,
+                "model_path": request.model_path,
+                "quantization": request.quantization or "fp16",
+                "model_type": request.model_type,
+            })
         result = self.worker.load_model(
             model_id=request.model_id,
             model_path=request.model_path,
@@ -94,6 +108,11 @@ class InferenceWorkerServicer(pb2_grpc.InferenceWorkerServicer):
         )
 
     def UnloadModel(self, request, context):
+        if self.tp:
+            self.tp.broadcast_command({
+                "action": "unload_model",
+                "model_id": request.model_id,
+            })
         result = self.worker.unload_model(
             model_id=request.model_id,
             force=request.force,
@@ -143,6 +162,14 @@ class InferenceWorkerServicer(pb2_grpc.InferenceWorkerServicer):
         if request.image_data:
             infer_request["image_data"] = request.image_data
             infer_request["image_mime_type"] = request.image_mime_type
+
+        # In TP mode, broadcast generate command so rank 1 calls model.generate() too
+        if self.tp:
+            self.tp.broadcast_command({
+                "action": "generate",
+                "model_id": request.model_id,
+                "infer_request": infer_request,
+            })
 
         for result in self.worker.infer(infer_request):
             # Check if client disconnected
@@ -200,12 +227,13 @@ class InferenceWorkerServicer(pb2_grpc.InferenceWorkerServicer):
                     ),
                 )
             else:
-                # Text chunk
+                # Text chunk (with thinking mode support)
                 yield pb2.InferResponse(
                     request_id=request.request_id,
                     chunk=pb2.TokenChunk(
                         token_ids=result.chunk_token_ids or [],
                         text=result.chunk_text or "",
+                        is_thinking=result.is_thinking,
                     ),
                 )
 
@@ -398,8 +426,11 @@ def _build_worker_state(state: dict) -> pb2.WorkerState:
 # Server
 # ================================================================
 
-def serve(port: int, gpu_id: int, worker_id: str):
-    worker = GpuWorker(gpu_id=gpu_id, worker_id=worker_id)
+def serve(port: int, gpu_id: int, worker_id: str,
+          tp_mode: bool = False, world_size: int = 1,
+          tp_coordinator=None):
+    worker = GpuWorker(gpu_id=gpu_id, worker_id=worker_id,
+                       tp_mode=tp_mode, world_size=world_size)
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=10),
         options=[
@@ -408,17 +439,20 @@ def serve(port: int, gpu_id: int, worker_id: str):
         ],
     )
     pb2_grpc.add_InferenceWorkerServicer_to_server(
-        InferenceWorkerServicer(worker), server
+        InferenceWorkerServicer(worker, tp_coordinator=tp_coordinator), server
     )
     server.add_insecure_port(f"0.0.0.0:{port}")
     server.start()
-    logger.info(f"GPU Worker {worker_id} listening on port {port} (GPU {gpu_id})")
+    mode_str = f"TP mode ({world_size} GPUs)" if tp_mode else f"GPU {gpu_id}"
+    logger.info(f"GPU Worker {worker_id} listening on port {port} ({mode_str})")
 
     # Graceful shutdown
     stop_event = threading.Event()
 
     def shutdown(signum, frame):
         logger.info("Shutting down...")
+        if tp_coordinator:
+            tp_coordinator.broadcast_command({"action": "shutdown"})
         stop_event.set()
         server.stop(grace=5)
 
@@ -429,11 +463,101 @@ def serve(port: int, gpu_id: int, worker_id: str):
     logger.info("Server stopped.")
 
 
+def run_tp_follower(rank: int, local_rank: int, world_size: int):
+    """
+    Rank 1+ command loop: waits for commands from rank 0 and participates
+    in collective operations (model loading, inference).
+
+    With tp_plan="auto", all ranks must call from_pretrained() and
+    model.generate() simultaneously for NCCL collectives to complete.
+    """
+    from tp_coordinator import TPCoordinator
+    coordinator = TPCoordinator(rank=rank, world_size=world_size)
+    worker = GpuWorker(gpu_id=local_rank, worker_id=f"tp-rank-{rank}",
+                       tp_mode=True, world_size=world_size)
+
+    logger.info(f"Rank {rank}: entering command loop")
+
+    while True:
+        try:
+            cmd = coordinator.recv_command()
+            if cmd is None or cmd.get("action") == "shutdown":
+                logger.info(f"Rank {rank}: shutdown command received")
+                break
+
+            action = cmd["action"]
+
+            if action == "load_model":
+                logger.info(f"Rank {rank}: loading model {cmd['model_id']}")
+                worker.load_model(
+                    model_id=cmd["model_id"],
+                    model_path=cmd.get("model_path", ""),
+                    quantization=cmd.get("quantization", "fp16"),
+                    model_type=cmd.get("model_type", ""),
+                )
+                logger.info(f"Rank {rank}: model {cmd['model_id']} loaded")
+
+            elif action == "unload_model":
+                logger.info(f"Rank {rank}: unloading model {cmd['model_id']}")
+                worker.unload_model(model_id=cmd["model_id"])
+
+            elif action == "generate":
+                model_id = cmd["model_id"]
+                if model_id not in worker.loaded_models:
+                    logger.warning(f"Rank {rank}: model {model_id} not loaded, skipping generate")
+                    continue
+                # Rank 1 calls infer() on the same model with same inputs.
+                # The DTensor NCCL ops will complete when both ranks participate.
+                # We consume the generator but discard results (only rank 0 streams to client).
+                infer_request = cmd["infer_request"]
+                for _ in worker.infer(infer_request):
+                    pass  # Participate in NCCL ops, discard output
+
+        except Exception as e:
+            logger.error(f"Rank {rank}: error in command loop: {e}", exc_info=True)
+
+    logger.info(f"Rank {rank}: exiting")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="GPU Worker gRPC Server")
     parser.add_argument("--port", type=int, default=50051, help="Port to listen on")
     parser.add_argument("--gpu-id", type=int, default=0, help="CUDA device index")
     parser.add_argument("--worker-id", type=str, default="worker-0", help="Worker identifier")
+    parser.add_argument("--tp", action="store_true", help="Enable tensor parallelism mode (use with torchrun)")
     args = parser.parse_args()
 
-    serve(port=args.port, gpu_id=args.gpu_id, worker_id=args.worker_id)
+    # Detect torchrun environment
+    is_tp = args.tp or os.environ.get("RANK") is not None
+    rank = 0
+    local_rank = args.gpu_id
+    world_size = 1
+
+    if is_tp:
+        import torch
+        import torch.distributed as dist
+
+        # torchrun sets these env vars
+        rank = int(os.environ.get("RANK", 0))
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        world_size = int(os.environ.get("WORLD_SIZE", 1))
+
+        logger.info(f"Tensor parallelism mode: rank={rank}, local_rank={local_rank}, world_size={world_size}")
+
+        # Initialize distributed process group — blocks until all ranks join
+        dist.init_process_group(backend="nccl")
+        torch.cuda.set_device(local_rank)
+
+        logger.info(f"Rank {rank}: process group initialized, device=cuda:{local_rank}")
+
+    if rank == 0:
+        tp_coordinator = None
+        if is_tp:
+            from tp_coordinator import TPCoordinator
+            tp_coordinator = TPCoordinator(rank=0, world_size=world_size)
+
+        serve(port=args.port, gpu_id=local_rank, worker_id=args.worker_id,
+              tp_mode=is_tp, world_size=world_size, tp_coordinator=tp_coordinator)
+    else:
+        # Rank 1+: command loop — participates in collective model loading & inference
+        run_tp_follower(rank=rank, local_rank=local_rank, world_size=world_size)

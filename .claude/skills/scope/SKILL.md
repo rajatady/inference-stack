@@ -265,7 +265,7 @@ See [infrastructure.md](infrastructure.md) "Our Simulation Setup" for full detai
 
 **Local machine (MacBook)**: Control plane + data plane gateway + test suite. NestJS API, router, scheduler, KV cache manager, batch formation. All CPU-only logic.
 
-**RunPod cluster** (ssh root@213.173.98.26 -p 13461): 2x NVIDIA RTX A4500 (20GB VRAM each), 48 CPU cores, 251GB RAM. Exposes gRPC endpoints for infer, cancel, health, cache_state, load_model, unload_model.
+**RunPod cluster** (ssh $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT): 2x NVIDIA RTX A4500 (20GB VRAM each), 48 CPU cores, 251GB RAM. Exposes gRPC endpoints for infer, cancel, health, cache_state, load_model, unload_model.
 
 **Model Roster** (6 models across 5 modalities):
 

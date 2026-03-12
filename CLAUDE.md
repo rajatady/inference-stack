@@ -5,7 +5,7 @@ A production-grade LLM inference API built in TypeScript/NestJS. Learning exerci
 
 ## Architecture (TL;DR)
 - **Local machine**: NestJS API gateway, router, scheduler, KV cache manager, tests. All CPU-only logic.
-- **RunPod cluster** (ssh root@213.173.98.26 -p 13461): 2x RTX A4500 (20GB VRAM each). GPU workers communicate via gRPC.
+- **GPU cluster** (RunPod or similar, see .env.example): 2x RTX A4500 (20GB VRAM each). GPU workers communicate via gRPC.
 - **Model roster** (7 models, 5 modalities): SmolLM2-135M-Instruct (text), SmolLM2-360M-Instruct (text), SmolLM2-1.7B-Instruct (text), Qwen2.5-VL-3B (vision), Kokoro-82M (TTS), SD Turbo (image gen), CogVideoX-2B (video gen). Base text models removed — instruct-only.
 - API server NEVER runs on GPU machines. Three planes: control, gateway, GPU workers.
 
@@ -98,7 +98,7 @@ test/
 
 ## Deployment Model
 - **Code is written locally** in both `inference-api/` and `gpu-worker/`
-- **gpu-worker/** is rsynced to RunPod: `rsync -avz gpu-worker/ root@213.173.98.26:/workspace/gpu-worker/ -e 'ssh -p 13461'`
+- **gpu-worker/** is rsynced to GPU host: `rsync -avz gpu-worker/ $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST:/workspace/gpu-worker/ -e 'ssh -p $RUNPOD_SSH_PORT'`
 - **Tests run locally** against the real GPU worker over the network
 - **No mocks.** All tests hit real GPU workers running real models.
 
@@ -370,14 +370,14 @@ GPUs become stateless. KV cache stored in CPU RAM/SSD/network pool, loaded to an
 - Dev server: `cd inference-api && npm run start:dev` → http://localhost:3000
 - ClickHouse queries: `clickhouse client -q "SELECT ... FROM inference.inference_metrics"`
 
-## RunPod Operations
-- SSH tunnel (required for tests): `ssh -f -N -L 50051:localhost:50051 -L 50052:localhost:50052 root@213.173.98.26 -p 13461`
-- Start worker-0 (GPU 0): `ssh root@213.173.98.26 -p 13461 'cd /workspace/gpu-worker && CUDA_VISIBLE_DEVICES=0 nohup python3 server.py --port 50051 --gpu-id 0 --worker-id worker-0 > /tmp/worker0.log 2>&1 &'`
-- Start worker-1 (GPU 1): `ssh root@213.173.98.26 -p 13461 'cd /workspace/gpu-worker && CUDA_VISIBLE_DEVICES=1 nohup python3 server.py --port 50052 --gpu-id 0 --worker-id worker-1 > /tmp/worker1.log 2>&1 &'`
+## GPU Host Operations
+- SSH tunnel (required for tests): `ssh -f -N -L 50051:localhost:50051 -L 50052:localhost:50052 $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT`
+- Start worker-0 (GPU 0): `ssh $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT 'cd /workspace/gpu-worker && CUDA_VISIBLE_DEVICES=0 nohup python3 server.py --port 50051 --gpu-id 0 --worker-id worker-0 > /tmp/worker0.log 2>&1 &'`
+- Start worker-1 (GPU 1): `ssh $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT 'cd /workspace/gpu-worker && CUDA_VISIBLE_DEVICES=1 nohup python3 server.py --port 50052 --gpu-id 0 --worker-id worker-1 > /tmp/worker1.log 2>&1 &'`
   - **Important**: worker-1 uses `--gpu-id 0` (not 1) because `CUDA_VISIBLE_DEVICES=1` remaps physical GPU 1 to device index 0. The worker resolves `physical_gpu_id` from `CUDA_VISIBLE_DEVICES` for pynvml calls.
-- Rsync code: `rsync -avz --exclude='__pycache__' gpu-worker/ root@213.173.98.26:/workspace/gpu-worker/ -e 'ssh -p 13461'`
-- Check logs: `ssh root@213.173.98.26 -p 13461 'tail -10 /tmp/worker0.log && echo "---" && tail -10 /tmp/worker1.log'`
-- Check GPU memory: `ssh root@213.173.98.26 -p 13461 'nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader'`
+- Rsync code: `rsync -avz --exclude='__pycache__' gpu-worker/ $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST:/workspace/gpu-worker/ -e 'ssh -p $RUNPOD_SSH_PORT'`
+- Check logs: `ssh $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT 'tail -10 /tmp/worker0.log && echo "---" && tail -10 /tmp/worker1.log'`
+- Check GPU memory: `ssh $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT 'nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv,noheader'`
 
 ## Tech Stack
 - NestJS 11 (TypeScript) — API gateway + all scheduling/routing logic

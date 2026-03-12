@@ -18,6 +18,8 @@ export interface ModelRosterEntry {
   type: ModelType;
   vramEstimateBytes: number;
   defaultGpu: string; // Worker ID preference (e.g., 'worker-0', 'worker-1')
+  tensorParallel?: boolean;       // Requires tensor parallelism across multiple GPUs
+  tensorParallelSize?: number;    // Number of GPUs needed for TP
 }
 
 export const MODEL_ROSTER: Record<string, ModelRosterEntry> = {
@@ -56,6 +58,13 @@ export const MODEL_ROSTER: Record<string, ModelRosterEntry> = {
     vramEstimateBytes: 7e9,
     defaultGpu: 'worker-1',
   },
+  'Qwen/Qwen3-14B': {
+    type: 'text_gen',
+    vramEstimateBytes: 29e9,
+    defaultGpu: 'tp-worker-0',
+    tensorParallel: true,
+    tensorParallelSize: 2,
+  },
 };
 
 export function getModelType(modelId: string): ModelType | undefined {
@@ -64,4 +73,12 @@ export function getModelType(modelId: string): ModelType | undefined {
 
 export function getDefaultGpu(modelId: string): string | undefined {
   return MODEL_ROSTER[modelId]?.defaultGpu;
+}
+
+export function isTensorParallel(modelId: string): boolean {
+  return MODEL_ROSTER[modelId]?.tensorParallel === true;
+}
+
+export function getTensorParallelSize(modelId: string): number {
+  return MODEL_ROSTER[modelId]?.tensorParallelSize ?? 1;
 }

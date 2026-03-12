@@ -10,7 +10,7 @@
  *
  * Prerequisites:
  *   1. GPU workers running on RunPod: python server.py --port 50051 --gpu-id 0
- *   2. SSH tunnel: ssh -f -N -L 50051:localhost:50051 -L 50052:localhost:50052 root@213.173.98.26 -p 13461
+ *   2. SSH tunnel: ssh -f -N -L 50051:localhost:50051 -L 50052:localhost:50052 $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT
  *
  * Scope reference: grpc-contract.md — InferenceWorker service
  * Test scenario: Foundation (prerequisite for T1-T22)

@@ -92,6 +92,7 @@ message MediaOutput {
 message TokenChunk {
   repeated int32 token_ids = 1;
   string text = 2;
+  bool is_thinking = 3;             // True if this token is part of <think>...</think> reasoning
 }
 
 message InferComplete {

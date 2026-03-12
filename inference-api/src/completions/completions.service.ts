@@ -147,7 +147,9 @@ export class CompletionsService {
       .enqueue({ dto, userId, priority })
       .then(async (result) => {
         // Emit final chunk with the complete result
-        if (result.choices?.[0]?.text) {
+        const hasText = result.choices?.[0]?.text;
+        const hasThinking = result.thinking_content;
+        if (hasText || hasThinking) {
           subject.next({
             data: JSON.stringify({
               id: requestId,
@@ -156,11 +158,12 @@ export class CompletionsService {
               model: dto.model,
               choices: [
                 {
-                  text: result.choices[0].text,
+                  text: result.choices?.[0]?.text ?? '',
                   index: 0,
-                  finish_reason: result.choices[0].finish_reason,
+                  finish_reason: result.choices?.[0]?.finish_reason ?? 'STOP',
                 },
               ],
+              ...(hasThinking && { thinking_content: result.thinking_content }),
               usage: result.usage,
             }),
           } as MessageEvent);

@@ -19,7 +19,7 @@ export const DEFAULT_SCHEDULER_CONFIG: SchedulerConfig = {
   maxQueueDepth: 100,
   maxQueuedTokens: 50_000,
   agingBoostPerSecond: 0.1,
-  requestTimeoutMs: 60_000,
+  requestTimeoutMs: 120_000,
 };
 
 export type RequestState =

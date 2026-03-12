@@ -41,7 +41,7 @@
   },
   {
     "role": "user",
-    "content": "Now. Onot the base real world setup. ssh root@213.173.98.26 -p 13461 -> runpod cluster with 2 gpus loaded at $0.25/hr/gpu for our setup. We will try ot load a family of small models like smollm2 135m and smollm2 360m or something similar to simulate the real world traffic."
+    "content": "Now. Onot the base real world setup. ssh root@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT -> runpod cluster with 2 gpus loaded at $0.25/hr/gpu for our setup. We will try ot load a family of small models like smollm2 135m and smollm2 360m or something similar to simulate the real world traffic."
   },
   {
     "role": "assistant",
@@ -461,7 +461,7 @@
   },
   {
     "role": "assistant",
-    "content": "Good catch. Let me check my scope and CLAUDE.md for the correct remote path.\nYes — it's right there in CLAUDE.md line 77 and 149. The correct remote path is `/workspace/gpu-worker/`, not `/root/gpu-worker/`. My rsync command was wrong.\n\nThe correct command is:\n```\nrsync -avz --exclude='__pycache__' gpu-worker/ root@213.173.98.26:/workspace/gpu-worker/ -e 'ssh -p 13461'\n```\n\nI had `/root/gpu-worker/` instead of `/workspace/gpu-worker/`. My CLAUDE.md already documents this explicitly. I forgot to ..."
+    "content": "Good catch. Let me check my scope and CLAUDE.md for the correct remote path.\nYes — it's right there in CLAUDE.md line 77 and 149. The correct remote path is `/workspace/gpu-worker/`, not `/root/gpu-worker/`. My rsync command was wrong.\n\nThe correct command is:\n```\nrsync -avz --exclude='__pycache__' gpu-worker/ root@$RUNPOD_SSH_HOST:/workspace/gpu-worker/ -e 'ssh -p $RUNPOD_SSH_PORT'\n```\n\nI had `/root/gpu-worker/` instead of `/workspace/gpu-worker/`. My CLAUDE.md already documents this explicitly. I forgot to ..."
   },
   {
     "role": "user",

@@ -39,6 +39,11 @@ class InferenceWorkerStub(object):
                 request_serializer=inference__worker__pb2.InferRequest.SerializeToString,
                 response_deserializer=inference__worker__pb2.InferResponse.FromString,
                 _registered_method=True)
+        self.BatchInfer = channel.unary_stream(
+                '/inference.worker.v1.InferenceWorker/BatchInfer',
+                request_serializer=inference__worker__pb2.BatchInferRequest.SerializeToString,
+                response_deserializer=inference__worker__pb2.InferResponse.FromString,
+                _registered_method=True)
         self.LoadModel = channel.unary_unary(
                 '/inference.worker.v1.InferenceWorker/LoadModel',
                 request_serializer=inference__worker__pb2.LoadModelRequest.SerializeToString,
@@ -81,6 +86,14 @@ class InferenceWorkerServicer(object):
 
     def Infer(self, request, context):
         """Run inference. Returns a stream of tokens.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def BatchInfer(self, request, context):
+        """Run batch inference. Multiple requests processed in a single GPU batch.
+        Returns a stream of InferResponse — use request_id to demux per-request results.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -141,6 +154,11 @@ def add_InferenceWorkerServicer_to_server(servicer, server):
             'Infer': grpc.unary_stream_rpc_method_handler(
                     servicer.Infer,
                     request_deserializer=inference__worker__pb2.InferRequest.FromString,
+                    response_serializer=inference__worker__pb2.InferResponse.SerializeToString,
+            ),
+            'BatchInfer': grpc.unary_stream_rpc_method_handler(
+                    servicer.BatchInfer,
+                    request_deserializer=inference__worker__pb2.BatchInferRequest.FromString,
                     response_serializer=inference__worker__pb2.InferResponse.SerializeToString,
             ),
             'LoadModel': grpc.unary_unary_rpc_method_handler(
@@ -205,6 +223,33 @@ class InferenceWorker(object):
             target,
             '/inference.worker.v1.InferenceWorker/Infer',
             inference__worker__pb2.InferRequest.SerializeToString,
+            inference__worker__pb2.InferResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def BatchInfer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/inference.worker.v1.InferenceWorker/BatchInfer',
+            inference__worker__pb2.BatchInferRequest.SerializeToString,
             inference__worker__pb2.InferResponse.FromString,
             options,
             channel_credentials,

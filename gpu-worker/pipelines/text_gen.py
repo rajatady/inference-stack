@@ -26,8 +26,8 @@ class TextGenPipeline(BasePipeline):
     """Text generation using AutoModelForCausalLM with optional KV cache persistence."""
 
     def __init__(self, model_id: str, device: str, quantization: str = "fp16",
-                 kv_store=None):
-        super().__init__(model_id, device, quantization)
+                 kv_store=None, tp_mode: bool = False):
+        super().__init__(model_id, device, quantization, tp_mode=tp_mode)
         self.model = None
         self.tokenizer = None
         self.kv_store = kv_store  # Optional KVCacheStore for disaggregated caching
@@ -42,7 +42,14 @@ class TextGenPipeline(BasePipeline):
         self.tokenizer = AutoTokenizer.from_pretrained(repo, trust_remote_code=True)
 
         dtype = torch.float16 if self.quantization == "fp16" else torch.float32
-        if self.quantization == "int8":
+
+        if self.tp_mode:
+            # Tensor parallelism: tp_plan="auto" + torchrun handles distribution
+            logger.info(f"[TextGen] Loading with tensor parallelism (tp_plan='auto')")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                repo, torch_dtype=dtype, tp_plan="auto", trust_remote_code=True
+            )
+        elif self.quantization == "int8":
             self.model = AutoModelForCausalLM.from_pretrained(
                 repo, load_in_8bit=True, device_map=self.device, trust_remote_code=True
             )
@@ -89,8 +96,12 @@ class TextGenPipeline(BasePipeline):
         cached_tokens = 0
         cache_hit = False
 
+        # Determine TP world size for cache validation
+        import os
+        tp_size = int(os.environ.get("WORLD_SIZE", "1")) if self.tp_mode else 1
+
         if session_id and self.kv_store:
-            restored_cache, load_stats = self.kv_store.load(session_id, self.device)
+            restored_cache, load_stats = self.kv_store.load(session_id, self.device, tp_size=tp_size)
             if restored_cache is not None:
                 cache_hit = True
                 cache_load_ms = load_stats["load_ms"]
@@ -156,6 +167,10 @@ class TextGenPipeline(BasePipeline):
             thread.start()
 
             prefill_time_ms = None
+            # Thinking mode state: track <think>...</think> tags in stream
+            in_thinking = False
+            thinking_buffer = ""  # Buffer to detect partial tag matches
+
             for text_chunk in streamer:
                 if not text_chunk:
                     continue
@@ -163,7 +178,58 @@ class TextGenPipeline(BasePipeline):
                 if prefill_time_ms is None:
                     prefill_time_ms = (now - start_time) * 1000
 
-                yield InferenceResult(chunk_text=text_chunk, chunk_token_ids=[])
+                # Parse thinking tags from streamed text
+                remaining = thinking_buffer + text_chunk
+                thinking_buffer = ""
+
+                while remaining:
+                    if in_thinking:
+                        # Look for </think> to end thinking block
+                        end_idx = remaining.find("</think>")
+                        if end_idx >= 0:
+                            # Yield thinking content up to tag
+                            think_text = remaining[:end_idx]
+                            if think_text:
+                                yield InferenceResult(
+                                    chunk_text=think_text, chunk_token_ids=[],
+                                    is_thinking=True,
+                                )
+                            in_thinking = False
+                            remaining = remaining[end_idx + len("</think>"):]
+                        elif remaining.endswith(("<", "</", "</t", "</th", "</thi", "</thin", "</think")):
+                            # Partial end tag — buffer it
+                            thinking_buffer = remaining
+                            remaining = ""
+                        else:
+                            yield InferenceResult(
+                                chunk_text=remaining, chunk_token_ids=[],
+                                is_thinking=True,
+                            )
+                            remaining = ""
+                    else:
+                        # Look for <think> to start thinking block
+                        start_idx = remaining.find("<think>")
+                        if start_idx >= 0:
+                            # Yield non-thinking content before tag
+                            before = remaining[:start_idx]
+                            if before:
+                                yield InferenceResult(chunk_text=before, chunk_token_ids=[])
+                            in_thinking = True
+                            remaining = remaining[start_idx + len("<think>"):]
+                        elif remaining.endswith(("<", "<t", "<th", "<thi", "<thin", "<think")):
+                            # Partial start tag — buffer it
+                            thinking_buffer = remaining
+                            remaining = ""
+                        else:
+                            yield InferenceResult(chunk_text=remaining, chunk_token_ids=[])
+                            remaining = ""
+
+            # Flush any remaining buffer
+            if thinking_buffer:
+                yield InferenceResult(
+                    chunk_text=thinking_buffer, chunk_token_ids=[],
+                    is_thinking=in_thinking,
+                )
 
             thread.join()
 
@@ -189,7 +255,7 @@ class TextGenPipeline(BasePipeline):
                 past_kv = generate_output[0].past_key_values
                 if past_kv is not None:
                     total_seq_len = prompt_tokens + completion_tokens
-                    save_stats = self.kv_store.save(session_id, past_kv, total_seq_len)
+                    save_stats = self.kv_store.save(session_id, past_kv, total_seq_len, tp_size=tp_size)
                     cache_save_ms = save_stats["save_ms"]
                     cache_size_bytes = save_stats["bytes"]
 

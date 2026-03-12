@@ -9,7 +9,7 @@
  *
  * Prerequisites:
  *   1. GPU workers running on RunPod
- *   2. SSH tunnel: ssh -f -N -L 50051:localhost:50051 root@213.173.98.26 -p 13461
+ *   2. SSH tunnel: ssh -f -N -L 50051:localhost:50051 $RUNPOD_SSH_USER@$RUNPOD_SSH_HOST -p $RUNPOD_SSH_PORT
  *
  * Scope reference: test-scenarios.md — T17 (model swap cost accounting)
  */
